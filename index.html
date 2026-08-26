@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>婚禮彈性排桌系統</title>
-    <!-- 引入 Tailwind CSS 與 Sortable.js (拖曳功能) -->
+    <title>婚禮彈性排桌系統 (含 Excel 匯入)</title>
+    <!-- 引入 Tailwind CSS、Sortable.js 與 SheetJS (用於讀取 Excel) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         .ghost-card { opacity: 0.4; background: #cbd5e1 !important; }
     </style>
@@ -17,7 +18,12 @@
     <header class="bg-rose-600 text-white shadow-md py-4 px-6">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 class="text-2xl font-bold tracking-wide">💍 婚禮彈性排桌系統</h1>
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2 items-center">
+                <!-- Excel 匯入按鈕 -->
+                <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1.5">
+                    📂 匯入 Excel 賓客
+                    <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
+                </label>
                 <button onclick="addNewTable()" class="bg-rose-500 hover:bg-rose-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">+ 新增一桌</button>
                 <button onclick="saveData()" class="bg-rose-700 hover:bg-rose-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">儲存進度</button>
                 <button onclick="resetData()" class="bg-rose-800 hover:bg-rose-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">重置</button>
@@ -31,11 +37,14 @@
         <!-- 左側面板：新增賓客與未分配名單 -->
         <div class="lg:col-span-1 flex flex-col gap-6">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
-                <h2 class="text-lg font-semibold mb-3 text-slate-700 border-b pb-2">👥 待分配賓客</h2>
+                <div class="flex justify-between items-center mb-3 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-slate-700">👥 待分配賓客</h2>
+                    <span id="unassigned-count" class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">0 人</span>
+                </div>
                 
-                <!-- 新增賓客表單 -->
+                <!-- 新增單一賓客表單 -->
                 <form id="addGuestForm" onsubmit="addGuest(event)" class="flex gap-2 mb-4">
-                    <input type="text" id="guestNameInput" placeholder="輸入賓客姓名..." required
+                    <input type="text" id="guestNameInput" placeholder="輸入姓名或備註..." required
                         class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none">
                     <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">新增</button>
                 </form>
@@ -47,13 +56,13 @@
             </div>
         </div>
 
-        <!-- 右側面板：各桌視覺化區塊 (每桌皆可獨立改名、改人數上限) -->
+        <!-- 右側面板：各桌視覺化區塊 -->
         <div class="lg:col-span-3 flex flex-col gap-4">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h2 class="text-lg font-semibold text-slate-700">🍽️ 現場桌位配置</h2>
-                        <p class="text-xs text-slate-500 mt-0.5">提示：每張桌子都可以直接修改「桌名」與「該桌人數上限」；利用滑鼠拖曳安排座位。</p>
+                        <p class="text-xs text-slate-500 mt-0.5">提示：每張桌子皆可獨立修改名稱與人數上限；支援滑鼠直接拖曳排位。</p>
                     </div>
                 </div>
                 
@@ -71,24 +80,19 @@
         // 初始狀態資料結構
         let state = {
             unassigned: [
-                { id: 'g1', name: '新郎長官 A' },
-                { id: 'g2', name: '新郎長官 B' },
-                { id: 'g3', name: '大學同學 - 小明' },
-                { id: 'g4', name: '大學同學 - 小華' },
-                { id: 'g5', name: '高中死黨 - 阿豪' },
-                { id: 'g6', name: '新娘同事 - Amy' }
+                { id: 'g1', name: '新郎長官 A', note: '長官' },
+                { id: 'g2', name: '大學同學 - 小明', note: '大學' }
             ],
             tables: {
                 'table-vip': { name: '主桌', capacity: 12, guests: [] },
-                'table-1': { name: '第 1 桌 (男方親友)', capacity: 10, guests: [] },
-                'table-2': { name: '第 2 桌 (女方親友)', capacity: 10, guests: [] },
-                'table-3': { name: '第 3 桌 (大學同學)', capacity: 8, guests: [] }
+                'table-1': { name: '第 1 桌', capacity: 10, guests: [] },
+                'table-2': { name: '第 2 桌', capacity: 10, guests: [] }
             }
         };
 
         // 頁面載入時讀取 localStorage
         window.addEventListener('DOMContentLoaded', () => {
-            const saved = localStorage.getItem('wedding_seating_custom_data');
+            const saved = localStorage.getItem('wedding_seating_excel_data');
             if (saved) {
                 try {
                     state = JSON.parse(saved);
@@ -98,15 +102,66 @@
         });
 
         function saveData() {
-            localStorage.setItem('wedding_seating_custom_data', JSON.stringify(state));
+            localStorage.setItem('wedding_seating_excel_data', JSON.stringify(state));
             alert('儲存成功！資料已保留在您的瀏覽器中。');
         }
 
         function resetData() {
             if(confirm('確定要重置所有資料嗎？')) {
-                localStorage.removeItem('wedding_seating_custom_data');
+                localStorage.removeItem('wedding_seating_excel_data');
                 location.reload();
             }
+        }
+
+        // 處理 Excel 檔案匯入
+        function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // 讀取第一個工作表
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // 轉成 JSON 陣列
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    if (jsonRows.length === 0) {
+                        alert('Excel 檔案內沒有找到資料！');
+                        return;
+                    }
+
+                    let addedCount = 0;
+                    jsonRows.forEach((row, index) => {
+                        // 尋找包含「姓名」、「名字」、「賓客」等關鍵字的欄位，若無則預設抓第一個欄位
+                        let nameKey = Object.keys(row).find(k => k.includes('姓') || k.includes('名') || k.includes('賓客')) || Object.keys(row)[0];
+                        let noteKey = Object.keys(row).find(k => k.includes('備註') || k.includes('關係') || k.includes('組別')) || Object.keys(row)[1];
+
+                        let name = row[nameKey] ? String(row[nameKey]).trim() : '';
+                        let note = (noteKey && row[noteKey]) ? String(row[noteKey]).trim() : '';
+
+                        if (name) {
+                            const newId = 'g_excel_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5) + index;
+                            state.unassigned.push({ id: newId, name: name, note: note });
+                            addedCount++;
+                        }
+                    });
+
+                    renderAll();
+                    alert(`成功匯入 ${addedCount} 位賓客到待分配名單！`);
+                } catch (err) {
+                    console.error(err);
+                    alert('讀取 Excel 失敗，請確認檔案格式是否正確（第一列需為標題，例如：姓名、備註）。');
+                } finally {
+                    event.target.value = ''; // 清空檔案選擇，允許重複匯入同個檔
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         // 新增一張桌子
@@ -121,7 +176,7 @@
             renderAll();
         }
 
-        // 刪除某張桌子 (裡面的賓客自動退回未分配)
+        // 刪除某張桌子
         function deleteTable(tableKey) {
             if(confirm(`確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`)) {
                 state.unassigned = state.unassigned.concat(state.tables[tableKey].guests);
@@ -130,31 +185,29 @@
             }
         }
 
-        // 當使用者即時修改某桌的名稱
         function updateTableName(tableKey, newName) {
             if(state.tables[tableKey]) {
                 state.tables[tableKey].name = newName;
             }
         }
 
-        // 當使用者即時修改某桌的人數上限
         function updateTableCapacity(tableKey, newCapacity) {
             const cap = parseInt(newCapacity) || 1;
             if(state.tables[tableKey]) {
                 state.tables[tableKey].capacity = cap;
-                renderTables(); // 重新渲染以更新滿員狀態顏色
+                renderTables();
             }
         }
 
-        // 新增賓客
+        // 新增單一賓客
         function addGuest(e) {
             e.preventDefault();
             const input = document.getElementById('guestNameInput');
-            const name = input.value.trim();
-            if(!name) return;
+            const val = input.value.trim();
+            if(!val) return;
 
             const newId = 'g_' + Math.random().toString(36).substr(2, 9);
-            state.unassigned.push({ id: newId, name: name });
+            state.unassigned.push({ id: newId, name: val, note: '' });
             input.value = '';
             renderAll();
         }
@@ -168,18 +221,18 @@
             renderAll();
         }
 
-        // 核心：重新渲染畫面
         function renderAll() {
             renderUnassigned();
             renderTables();
             initSortable();
         }
 
-        // 渲染未分配清單
         function renderUnassigned() {
             const container = document.getElementById('unassigned-list');
             container.innerHTML = '';
             
+            document.getElementById('unassigned-count').innerText = `${state.unassigned.length} 人`;
+
             if(state.unassigned.length === 0) {
                 container.innerHTML = `<div class="text-xs text-slate-400 text-center py-6">所有賓客皆已入座！</div>`;
                 return;
@@ -190,14 +243,16 @@
                 el.className = 'bg-white p-2.5 rounded-lg shadow-sm border border-slate-200 flex justify-between items-center cursor-grab active:cursor-grabbing text-sm';
                 el.setAttribute('data-id', g.id);
                 el.innerHTML = `
-                    <span class="font-medium text-slate-700">👤 ${g.name}</span>
-                    <button onclick="removeGuest('${g.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1">✕</button>
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <span class="font-medium text-slate-700 truncate">👤 ${g.name}</span>
+                        ${g.note ? `<span class="text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded border border-rose-100">${g.note}</span>` : ''}
+                    </div>
+                    <button onclick="removeGuest('${g.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1 shrink-0">✕</button>
                 `;
                 container.appendChild(el);
             });
         }
 
-        // 渲染所有桌子
         function renderTables() {
             const container = document.getElementById('tables-container');
             container.innerHTML = '';
@@ -210,7 +265,6 @@
                 tableCard.className = `bg-slate-50 border rounded-xl p-4 flex flex-col transition border-slate-200`;
                 
                 tableCard.innerHTML = `
-                    <!-- 頂部：可直接改桌名、改容量、刪除桌子 -->
                     <div class="flex flex-col gap-2 mb-3 pb-2 border-b border-slate-200">
                         <div class="flex justify-between items-center gap-2">
                             <input type="text" value="${table.name}" onchange="updateTableName('${key}', this.value)"
@@ -230,12 +284,14 @@
                         </div>
                     </div>
 
-                    <!-- 該桌的賓客放置區 -->
                     <div id="${key}" class="table-drop-zone flex-grow min-h-[120px] space-y-2 overflow-y-auto max-h-[220px] p-1">
                         ${table.guests.map(g => `
                             <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex justify-between items-center cursor-grab active:cursor-grabbing text-sm" data-id="${g.id}">
-                                <span class="font-medium text-slate-700">👤 ${g.name}</span>
-                                <button onclick="removeGuest('${g.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1">✕</button>
+                                <div class="flex items-center gap-2 overflow-hidden">
+                                    <span class="font-medium text-slate-700 truncate">👤 ${g.name}</span>
+                                    ${g.note ? `<span class="text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded border border-rose-100">${g.note}</span>` : ''}
+                                </div>
+                                <button onclick="removeGuest('${g.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1 shrink-0">✕</button>
                             </div>
                         `).join('')}
                     </div>
@@ -244,7 +300,6 @@
             }
         }
 
-        // 初始化拖曳功能
         function initSortable() {
             new Sortable(document.getElementById('unassigned-list'), {
                 group: 'wedding',
@@ -266,7 +321,6 @@
             }
         }
 
-        // 同步拖曳後的資料狀態
         function updateDataFromDOM() {
             let newUnassigned = [];
             document.querySelectorAll('#unassigned-list > div[data-id]').forEach(el => {
