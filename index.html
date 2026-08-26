@@ -781,41 +781,6 @@ function initSortable() {
 }
 
 
-    /*
-     * ======================
-     * 每一桌
-     * ======================
-     */
-
-    for (
-        let key in state.tables
-    ) {
-
-        const tableEl =
-            document.getElementById(
-                key
-            );
-
-
-        if (tableEl) {
-
-            sortableInstances.push(
-
-                new Sortable(
-
-                    tableEl,
-
-                    {
-
-                        ...commonOptions,
-
-                        sort: true
-                    }
-                )
-            );
-        }
-    }
-}
 
 
 /* =========================
