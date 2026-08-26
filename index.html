@@ -20,7 +20,7 @@
             <div class="flex flex-wrap gap-2 items-center">
                 <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1">
                     📂 匯入賓客
-                    <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleExcelImport(event)">
+                    <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
                 </label>
                 <button onclick="exportToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow flex items-center gap-1">
                     📊 匯出 Excel
@@ -45,12 +45,12 @@
                 </div>
                 
                 <form id="addGuestForm" onsubmit="addGuest(event)" class="flex gap-2 mb-4">
-                    <input type="text" id="guestNameInput" placeholder="輸入姓名..." required
+                    <input type="text" id="guestNameInput" placeholder="輸入姓名或備註..." required
                         class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none">
                     <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">新增</button>
                 </form>
 
-                <div id="unassigned-categories-container" class="flex-grow overflow-y-auto max-h-[600px] space-y-4 pr-1">
+                <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
                     </div>
             </div>
         </div>
@@ -74,8 +74,8 @@
     <script>
         let state = {
             unassigned: [
-                { note: '男方親友', guests: [{ id: 'g1', name: '新郎長官 A', note: '男方親友' }] },
-                { note: '大學同學', guests: [{ id: 'g2', name: '小明', note: '大學同學' }] }
+                { id: 'g1', name: '新郎長官 A', note: '長官' },
+                { id: 'g2', name: '大學同學 - 小明', note: '大學' }
             ],
             tables: {
                 'table-vip': { name: '主桌', capacity: 12, guests: [] },
@@ -87,7 +87,7 @@
         let sortableInstances = [];
 
         window.addEventListener('DOMContentLoaded', () => {
-            const saved = localStorage.getItem('wedding_seating_excel_data_v3');
+            const saved = localStorage.getItem('wedding_seating_excel_data');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
@@ -100,13 +100,13 @@
         });
 
         function saveData() {
-            localStorage.setItem('wedding_seating_excel_data_v3', JSON.stringify(state));
+            localStorage.setItem('wedding_seating_excel_data', JSON.stringify(state));
             alert('儲存成功！資料已保留在您的瀏覽器中。');
         }
 
         function resetData() {
             if(confirm('確定要重置所有資料嗎？')) {
-                localStorage.removeItem('wedding_seating_excel_data_v3');
+                localStorage.removeItem('wedding_seating_excel_data');
                 location.reload();
             }
         }
@@ -120,49 +120,45 @@
             initSortable();
         }
 
+        // 關鍵核心：當拖曳結束時，直接由事件物件即時更新 state 變數，安全又百分之百準確
         function initSortable() {
             const commonOptions = {
                 group: 'wedding',
                 animation: 150,
                 ghostClass: 'ghost-card',
                 onEnd: function(evt) {
-                    const itemEl = evt.item;
+                    const itemEl = evt.item; // 被拖曳的元素
                     const guestId = itemEl.getAttribute('data-id');
                     const fromContainerId = evt.from.id;
                     const toContainerId = evt.to.id;
 
+                    // 1. 從原本的地方移除該賓客物件
                     let movedGuest = null;
-                    if (fromContainerId.startsWith('cat-')) {
-                        let catName = decodeURIComponent(fromContainerId.replace('cat-', ''));
-                        let group = state.unassigned.find(g => (g.note || '未分類') === catName);
-                        if (group) {
-                            let idx = group.guests.findIndex(g => g.id === guestId);
-                            if (idx !== -1) movedGuest = group.guests.splice(idx, 1)[0];
+                    if (fromContainerId === 'unassigned-list') {
+                        let idx = state.unassigned.findIndex(g => g.id === guestId);
+                        if (idx !== -1) {
+                            movedGuest = state.unassigned.splice(idx, 1)[0];
                         }
                     } else if (state.tables[fromContainerId]) {
                         let idx = state.tables[fromContainerId].guests.findIndex(g => g.id === guestId);
-                        if (idx !== -1) movedGuest = state.tables[fromContainerId].guests.splice(idx, 1)[0];
+                        if (idx !== -1) {
+                            movedGuest = state.tables[fromContainerId].guests.splice(idx, 1)[0];
+                        }
                     }
 
+                    // 2. 插入到新的目標容器對應的陣列中，依據畫面的順序
                     if (movedGuest) {
-                        if (toContainerId.startsWith('cat-')) {
-                            let catName = decodeURIComponent(toContainerId.replace('cat-', ''));
-                            let group = state.unassigned.find(g => (g.note || '未分類') === catName);
-                            if (!group) {
-                                group = { note: catName, guests: [] };
-                                state.unassigned.push(group);
-                            }
-                            const targetChildren = Array.from(evt.to.querySelectorAll('div[data-id]'));
-                            const newIndex = targetChildren.indexOf(itemEl);
-                            if (newIndex >= 0 && newIndex < group.guests.length) {
-                                group.guests.splice(newIndex, 0, movedGuest);
+                        const targetChildren = Array.from(evt.to.querySelectorAll('div[data-id]'));
+                        const newIndex = targetChildren.indexOf(itemEl);
+
+                        if (toContainerId === 'unassigned-list') {
+                            if (newIndex >= 0 && newIndex < state.unassigned.length) {
+                                state.unassigned.splice(newIndex, 0, movedGuest);
                             } else {
-                                group.guests.push(movedGuest);
+                                state.unassigned.push(movedGuest);
                             }
                         } else if (state.tables[toContainerId]) {
                             let tableGuests = state.tables[toContainerId].guests;
-                            const targetChildren = Array.from(evt.to.querySelectorAll('div[data-id]'));
-                            const newIndex = targetChildren.indexOf(itemEl);
                             if (newIndex >= 0 && newIndex < tableGuests.length) {
                                 tableGuests.splice(newIndex, 0, movedGuest);
                             } else {
@@ -171,15 +167,15 @@
                         }
                     }
 
-                    state.unassigned = state.unassigned.filter(g => g.guests.length > 0);
-                    updateTotalUnassignedCount();
+                    // 3. 僅更新計數器與 UI 狀態，不重新完整渲染 DOM，避免打斷拖曳畫面
                     updateAllGuestCounts();
                 }
             };
 
-            document.querySelectorAll('.unassigned-category-zone').forEach(el => {
-                sortableInstances.push(new Sortable(el, commonOptions));
-            });
+            const unassignedList = document.getElementById('unassigned-list');
+            if (unassignedList) {
+                sortableInstances.push(new Sortable(unassignedList, commonOptions));
+            }
 
             for(let key in state.tables) {
                 const tableEl = document.getElementById(key);
@@ -189,25 +185,18 @@
             }
         }
 
+        // --- 各項按鈕操作 ---
+
         function addNewTable() {
             const newId = 'table_' + Date.now();
             const tableCount = Object.keys(state.tables).length + 1;
             state.tables[newId] = { name: `第 ${tableCount} 桌`, capacity: 10, guests: [] };
-            renderAll();
+            renderAll(); // 新增桌子時才重新渲染整個畫面，此時 state 已經是最新且安全的
         }
 
         function deleteTable(tableKey) {
             if(confirm(`確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`)) {
-                let returnedGuests = state.tables[tableKey].guests;
-                returnedGuests.forEach(g => {
-                    let note = g.note || '未分類';
-                    let group = state.unassigned.find(grp => grp.note === note);
-                    if (group) {
-                        group.guests.push(g);
-                    } else {
-                        state.unassigned.push({ note: note, guests: [g] });
-                    }
-                });
+                state.unassigned = state.unassigned.concat(state.tables[tableKey].guests);
                 delete state.tables[tableKey];
                 renderAll();
             }
@@ -219,30 +208,20 @@
             const val = input.value.trim();
             if(!val) return;
             const newId = 'g_' + Date.now();
-            
-            let defaultGroup = state.unassigned.find(g => g.note === '手動新增');
-            if(defaultGroup) {
-                defaultGroup.guests.push({ id: newId, name: val, note: '手動新增' });
-            } else {
-                state.unassigned.push({ note: '手動新增', guests: [{ id: newId, name: val, note: '手動新增' }] });
-            }
-
+            state.unassigned.push({ id: newId, name: val, note: '手動新增' });
             input.value = '';
             renderAll();
         }
 
         function removeGuest(id) {
-            state.unassigned.forEach(grp => {
-                grp.guests = grp.guests.filter(g => g.id !== id);
-            });
-            state.unassigned = state.unassigned.filter(g => g.guests.length > 0);
-
+            state.unassigned = state.unassigned.filter(g => g.id !== id);
             for(let key in state.tables) {
                 state.tables[key].guests = state.tables[key].guests.filter(g => g.id !== id);
             }
             renderAll();
         }
 
+        // --- 下載圖片功能 ---
         function exportToImage() {
             const captureArea = document.getElementById('capture-area');
             alert('正在產生高畫質座位圖，請稍候...');
@@ -262,6 +241,7 @@
             });
         }
 
+        // --- 匯出 Excel 功能 ---
         function exportToExcel() {
             let exportData = [];
 
@@ -288,19 +268,14 @@
                 }
             }
 
-            let totalUnassignedCount = 0;
-            state.unassigned.forEach(grp => totalUnassignedCount += grp.guests.length);
-
-            if(totalUnassignedCount > 0) {
-                state.unassigned.forEach(grp => {
-                    grp.guests.forEach(g => {
-                        exportData.push({
-                            "桌名": `【未分配 - ${grp.note}】`,
-                            "人數上限": "-",
-                            "目前人數": totalUnassignedCount,
-                            "賓客姓名": g.name,
-                            "備註/關係": g.note || ""
-                        });
+            if(state.unassigned.length > 0) {
+                state.unassigned.forEach(g => {
+                    exportData.push({
+                        "桌名": "【未分配區】",
+                        "人數上限": "-",
+                        "目前人數": state.unassigned.length,
+                        "賓客姓名": g.name,
+                        "備註/關係": g.note || ""
                     });
                 });
             }
@@ -311,7 +286,6 @@
             XLSX.writeFile(workbook, "婚禮座位表配置結果.xlsx");
         }
 
-        // 升級版：安全的 Excel 讀取解析器
         function handleExcelImport(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -323,41 +297,28 @@
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
-                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet);
                     
-                    if (!jsonRows || jsonRows.length === 0) { 
-                        alert('Excel 檔案內沒有找到資料！'); 
-                        return; 
-                    }
+                    if (jsonRows.length === 0) { alert('Excel 內無資料'); return; }
 
                     let addedCount = 0;
                     jsonRows.forEach((row, index) => {
-                        // 智慧搜尋欄位：找出包含姓名/名字/賓客的欄位
-                        const keys = Object.keys(row);
-                        const nameKey = keys.find(k => /姓|名|賓客|名稱|user|name/i.test(k)) || keys[0];
-                        const noteKey = keys.find(k => /備註|關係|組別|標籤|分類|group|note/i.test(k)) || keys[1];
+                        const nameKeys = Object.keys(row).filter(k => /姓|名|賓客|名稱/.test(k));
+                        const noteKeys = Object.keys(row).filter(k => /備註|關係|組別|標籤/.test(k));
                         
-                        let name = row[nameKey];
-                        let note = noteKey ? row[noteKey] : '未分類';
+                        let name = row[nameKeys[0]] || row[Object.keys(row)[0]];
+                        let note = row[noteKeys[0]] || row[Object.keys(row)[1]] || '';
 
-                        if (name !== undefined && name !== null && String(name).trim() !== "") {
+                        if (name) {
                             name = String(name).trim();
-                            note = (note !== undefined && note !== null && String(note).trim() !== "") ? String(note).trim() : '未分類';
+                            note = String(note).trim();
                             
-                            // 檢查是否重複
-                            let existsInUnassigned = state.unassigned.some(grp => grp.guests.some(g => g.name === name));
-                            let existsInTable = Object.values(state.tables).some(t => t.guests.some(g => g.name === name));
+                            const exists = state.unassigned.some(g => g.name === name) || 
+                                         Object.values(state.tables).some(t => t.guests.some(g => g.name === name));
                             
-                            if (!existsInUnassigned && !existsInTable) {
+                            if (!exists) {
                                 const newId = `g_xl_${Date.now()}_${index}`;
-                                let guestObj = { id: newId, name: name, note: note };
-                                
-                                let group = state.unassigned.find(grp => grp.note === note);
-                                if (group) {
-                                    group.guests.push(guestObj);
-                                } else {
-                                    state.unassigned.push({ note: note, guests: [guestObj] });
-                                }
+                                state.unassigned.push({ id: newId, name: name, note: note });
                                 addedCount++;
                             }
                         }
@@ -367,7 +328,7 @@
                     alert(`成功匯入 ${addedCount} 位賓客！`);
                 } catch (err) {
                     console.error(err);
-                    alert('讀取 Excel 失敗！請確認您的 Excel 檔案格式是否正常（建議為標準的 .xlsx 檔案，且第一列為標題）。');
+                    alert('讀取 Excel 失敗，請確認檔案格式是否正確。');
                 } finally {
                     event.target.value = '';
                 }
@@ -388,51 +349,20 @@
         }
 
         function renderUnassigned() {
-            const container = document.getElementById('unassigned-categories-container');
+            const container = document.getElementById('unassigned-list');
             container.innerHTML = '';
             
-            updateTotalUnassignedCount();
+            const countEl = document.getElementById('unassigned-count');
+            if(countEl) countEl.innerText = `${state.unassigned.length} 人`;
 
-            if(!state.unassigned || state.unassigned.length === 0) {
-                container.innerHTML = `<div class="text-xs text-slate-400 text-center py-6">目前沒有待分配賓客！</div>`;
+            if(state.unassigned.length === 0) {
+                container.innerHTML = `<div class="text-xs text-slate-400 text-center py-6">所有賓客皆已入座！</div>`;
                 return;
             }
 
-            state.unassigned.forEach(group => {
-                if (!group.guests || group.guests.length === 0) return;
-                
-                const groupDiv = document.createElement('div');
-                groupDiv.className = 'bg-slate-50 border border-slate-200 rounded-xl p-3';
-                
-                const safeCategoryName = encodeURIComponent(group.note || '未分類');
-
-                groupDiv.innerHTML = `
-                    <div class="flex justify-between items-center mb-2 pb-1 border-b border-slate-200">
-                        <span class="text-xs font-bold text-slate-600 truncate">📂 ${group.note || '未分類'}</span>
-                        <span class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">${group.guests.length} 人</span>
-                    </div>
-                    <div id="cat-${safeCategoryName}" class="unassigned-category-zone min-h-[40px] space-y-2">
-                        </div>
-                `;
-                
-                container.appendChild(groupDiv);
-
-                const zone = groupDiv.querySelector(`#cat-${safeCategoryName}`);
-                group.guests.forEach(g => {
-                    zone.appendChild(createGuestElement(g));
-                });
+            state.unassigned.forEach(g => {
+                container.appendChild(createGuestElement(g));
             });
-        }
-
-        function updateTotalUnassignedCount() {
-            let total = 0;
-            if (state.unassigned) {
-                state.unassigned.forEach(grp => {
-                    if (grp.guests) total += grp.guests.length;
-                });
-            }
-            const countEl = document.getElementById('unassigned-count');
-            if(countEl) countEl.innerText = `${total} 人`;
         }
 
         function renderTables() {
@@ -482,9 +412,12 @@
             el.className = 'bg-white p-2 rounded-md shadow-sm border border-slate-200 flex justify-between items-center cursor-grab active:cursor-grabbing text-sm hover:border-rose-200';
             el.setAttribute('data-id', g.id);
             
+            let noteHtml = g.note ? `<span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-1 truncate max-w-[80px]" title="${g.note}">${g.note}</span>` : '';
+            
             el.innerHTML = `
                 <div class="flex items-center overflow-hidden">
                     <span class="font-medium text-slate-700 truncate">👤 ${g.name}</span>
+                    ${noteHtml}
                 </div>
                 <button type="button" onclick="removeGuest('${g.id}')" class="text-slate-300 hover:text-rose-600 text-xs px-1.5 shrink-0" title="移除">✕</button>
             `;
