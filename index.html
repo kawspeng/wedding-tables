@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>婚禮彈性排桌系統</title>
-    <!-- 引入 Tailwind CSS、Sortable.js、SheetJS 與 html2canvas -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -15,7 +14,6 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <!-- 頂部導覽列 -->
     <header class="bg-rose-600 text-white shadow-md py-4 px-6">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 class="text-2xl font-bold tracking-wide">💍 婚禮彈性排桌系統</h1>
@@ -37,10 +35,8 @@
         </div>
     </header>
 
-    <!-- 主體內容 -->
     <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
         
-        <!-- 左側面板：未分配名單 -->
         <div class="lg:col-span-1 flex flex-col gap-6">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-3 border-b pb-2">
@@ -55,12 +51,10 @@
                 </form>
 
                 <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
-                    <!-- 動態帶入 -->
-                </div>
+                    </div>
             </div>
         </div>
 
-        <!-- 右側面板：各桌視覺化區塊 (截圖區範圍) -->
         <div class="lg:col-span-3 flex flex-col gap-4">
             <div id="capture-area" class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-4">
@@ -70,16 +64,13 @@
                     </div>
                 </div>
                 
-                <!-- 桌子呈現網格 -->
                 <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    <!-- 動態生成各桌 -->
-                </div>
+                    </div>
             </div>
         </div>
 
     </main>
 
-    <!-- 網頁互動邏輯 -->
     <script>
         let state = {
             unassigned: [
@@ -109,6 +100,7 @@
         });
 
         function saveData() {
+            updateDataFromDOM(); // 存檔前先確保狀態同步
             localStorage.setItem('wedding_seating_excel_data', JSON.stringify(state));
             alert('儲存成功！資料已保留在您的瀏覽器中。');
         }
@@ -188,6 +180,46 @@
             return null;
         }
 
+        // --- 核心修正點：各項操作前先執行 updateDataFromDOM() ---
+
+        function addNewTable() {
+            updateDataFromDOM(); // 關鍵：新增桌子前，先把畫面上的最新排位抓回 state
+            const newId = 'table_' + Date.now();
+            const tableCount = Object.keys(state.tables).length + 1;
+            state.tables[newId] = { name: `第 ${tableCount} 桌`, capacity: 10, guests: [] };
+            renderAll();
+        }
+
+        function deleteTable(tableKey) {
+            updateDataFromDOM(); // 關鍵：刪除前先同步
+            if(confirm(`確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`)) {
+                state.unassigned = state.unassigned.concat(state.tables[tableKey].guests);
+                delete state.tables[tableKey];
+                renderAll();
+            }
+        }
+
+        function addGuest(e) {
+            e.preventDefault();
+            updateDataFromDOM(); // 關鍵：新增賓客前先同步
+            const input = document.getElementById('guestNameInput');
+            const val = input.value.trim();
+            if(!val) return;
+            const newId = 'g_' + Date.now();
+            state.unassigned.push({ id: newId, name: val, note: '手動新增' });
+            input.value = '';
+            renderAll();
+        }
+
+        function removeGuest(id) {
+            updateDataFromDOM(); // 關鍵：移除前先同步
+            state.unassigned = state.unassigned.filter(g => g.id !== id);
+            for(let key in state.tables) {
+                state.tables[key].guests = state.tables[key].guests.filter(g => g.id !== id);
+            }
+            renderAll();
+        }
+
         // --- 下載圖片功能 ---
         function exportToImage() {
             updateDataFromDOM();
@@ -257,6 +289,7 @@
         }
 
         function handleExcelImport(event) {
+            updateDataFromDOM();
             const file = event.target.files[0];
             if (!file) return;
 
@@ -304,40 +337,6 @@
                 }
             };
             reader.readAsArrayBuffer(file);
-        }
-
-        function addGuest(e) {
-            e.preventDefault();
-            const input = document.getElementById('guestNameInput');
-            const val = input.value.trim();
-            if(!val) return;
-            const newId = 'g_' + Date.now();
-            state.unassigned.push({ id: newId, name: val, note: '手動新增' });
-            input.value = '';
-            renderAll();
-        }
-
-        function removeGuest(id) {
-            state.unassigned = state.unassigned.filter(g => g.id !== id);
-            for(let key in state.tables) {
-                state.tables[key].guests = state.tables[key].guests.filter(g => g.id !== id);
-            }
-            renderAll();
-        }
-
-        function addNewTable() {
-            const newId = 'table_' + Date.now();
-            const tableCount = Object.keys(state.tables).length + 1;
-            state.tables[newId] = { name: `第 ${tableCount} 桌`, capacity: 10, guests: [] };
-            renderAll();
-        }
-
-        function deleteTable(tableKey) {
-            if(confirm(`確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`)) {
-                state.unassigned = state.unassigned.concat(state.tables[tableKey].guests);
-                delete state.tables[tableKey];
-                renderAll();
-            }
         }
 
         function updateTableName(tableKey, newName) {
@@ -398,8 +397,7 @@
                         </div>
                     </div>
                     <div id="${key}" class="table-drop-zone flex-grow min-h-[100px] space-y-2 p-1 bg-slate-50/50 rounded-lg">
-                        <!-- 賓客將插入於此 -->
-                    </div>
+                        </div>
                 `;
                 
                 container.appendChild(tableCard);
