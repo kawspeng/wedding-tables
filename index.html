@@ -37,7 +37,7 @@
 
     <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
         
-        <div class="lg:col-span-1 flex flex-col gap-6">
+        <div class="lg:col-span-1 flex flex-col gap-6 lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-2rem)]">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-3 border-b pb-2">
                     <h2 class="text-lg font-semibold text-slate-700">👥 待分配賓客</h2>
@@ -50,7 +50,7 @@
                     <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">新增</button>
                 </form>
 
-                <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
+                <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2">
                     </div>
             </div>
         </div>
@@ -126,6 +126,13 @@
                 group: 'wedding',
                 animation: 150,
                 ghostClass: 'ghost-card',
+
+                scroll: true,
+                scrollSensitivity: 120,
+                scrollSpeed: 18,
+                bubbleScroll: true,
+                forceAutoScrollFallback: true,
+                
                 onEnd: function(evt) {
                     const itemEl = evt.item; // 被拖曳的元素
                     const guestId = itemEl.getAttribute('data-id');
