@@ -3,42 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>婚禮彈性排桌系統</title>
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- SortableJS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-
-    <!-- Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <!-- html2canvas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <style>
         .ghost-card {
-            opacity: 0.4;
+            opacity: 0.35;
             background: #cbd5e1 !important;
         }
 
-        /*
-         * 電腦版
-         * 左側「待分配賓客」固定在畫面
-         */
-        @media (min-width: 1024px) {
+        .chosen-card {
+            opacity: 0.95;
+        }
 
+        .drag-card {
+            transform: rotate(1deg);
+        }
+
+        @media (min-width: 1024px) {
             #guest-sidebar {
                 position: sticky;
                 top: 16px;
                 align-self: start;
-
-                /*
-                 * 整個左側區塊高度
-                 * 不超過目前瀏覽器視窗
-                 */
                 height: calc(100vh - 32px);
                 min-height: 0;
             }
@@ -46,32 +36,21 @@
             #guest-sidebar-card {
                 height: 100%;
                 min-height: 0;
-
                 display: flex;
                 flex-direction: column;
-
                 overflow: hidden;
             }
 
-            /*
-             * 只有待分配賓客名單
-             * 可以獨立上下捲動
-             */
             #unassigned-list {
                 flex: 1 1 auto;
                 min-height: 0;
-
                 overflow-y: auto !important;
                 overflow-x: hidden;
-
                 overscroll-behavior: contain;
                 scrollbar-gutter: stable;
             }
         }
 
-        /*
-         * 讓左側捲軸比較清楚
-         */
         #unassigned-list::-webkit-scrollbar {
             width: 8px;
         }
@@ -89,860 +68,1197 @@
         #unassigned-list::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+
+        .table-drop-zone {
+            transition: box-shadow 0.12s ease, background-color 0.12s ease;
+        }
     </style>
 </head>
 
-
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
+<header class="bg-rose-600 text-white shadow-md py-4 px-6">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
 
-    <!-- =========================
-         頂部工具列
-    ========================== -->
-    <header class="bg-rose-600 text-white shadow-md py-4 px-6">
+        <h1 class="text-2xl font-bold tracking-wide">
+            💍 婚禮彈性排桌系統
+        </h1>
 
-        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div class="flex flex-wrap gap-2 items-center">
 
-            <h1 class="text-2xl font-bold tracking-wide">
-                💍 婚禮彈性排桌系統
-            </h1>
-
-            <div class="flex flex-wrap gap-2 items-center">
-
-                <!-- 匯入 Excel -->
-                <label
-                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1"
+            <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1">
+                📂 匯入賓客
+                <input
+                    type="file"
+                    id="excelFile"
+                    accept=".xlsx, .xls"
+                    class="hidden"
+                    onchange="handleExcelImport(event)"
                 >
-                    📂 匯入賓客
+            </label>
 
-                    <input
-                        type="file"
-                        id="excelFile"
-                        accept=".xlsx, .xls"
-                        class="hidden"
-                        onchange="handleExcelImport(event)"
-                    >
-                </label>
+            <button
+                onclick="exportToExcel()"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
+            >
+                📊 匯出 Excel
+            </button>
 
+            <button
+                onclick="exportToImage()"
+                class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
+            >
+                📷 下載座位圖
+            </button>
 
-                <!-- 匯出 Excel -->
-                <button
-                    onclick="exportToExcel()"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow flex items-center gap-1"
-                >
-                    📊 匯出 Excel
-                </button>
+            <button
+                onclick="addNewTable()"
+                class="bg-rose-500 hover:bg-rose-400 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
+            >
+                + 新增桌
+            </button>
 
+            <button
+                onclick="saveData()"
+                class="bg-rose-700 hover:bg-rose-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
+            >
+                儲存
+            </button>
 
-                <!-- 下載座位圖 -->
-                <button
-                    onclick="exportToImage()"
-                    class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow flex items-center gap-1"
-                >
-                    📷 下載座位圖
-                </button>
+            <button
+                onclick="resetData()"
+                class="bg-rose-800 hover:bg-rose-900 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
+            >
+                重置
+            </button>
 
-
-                <!-- 新增桌 -->
-                <button
-                    onclick="addNewTable()"
-                    class="bg-rose-500 hover:bg-rose-400 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
-                >
-                    + 新增桌
-                </button>
-
-
-                <!-- 儲存 -->
-                <button
-                    onclick="saveData()"
-                    class="bg-rose-700 hover:bg-rose-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
-                >
-                    儲存
-                </button>
-
-
-                <!-- 重置 -->
-                <button
-                    onclick="resetData()"
-                    class="bg-rose-800 hover:bg-rose-900 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow"
-                >
-                    重置
-                </button>
-
-            </div>
         </div>
-    </header>
+    </div>
+</header>
 
 
+<main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
 
-    <!-- =========================
-         主畫面
-    ========================== -->
-    <main
-        class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full"
-    >
+    <!-- 左側待分配賓客 -->
+    <div id="guest-sidebar" class="lg:col-span-1">
 
-
-        <!-- =========================
-             左側：待分配賓客
-        ========================== -->
         <div
-            id="guest-sidebar"
-            class="lg:col-span-1"
+            id="guest-sidebar-card"
+            class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
         >
 
-            <div
-                id="guest-sidebar-card"
-                class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
+            <div class="flex justify-between items-center mb-3 border-b pb-2 shrink-0">
+
+                <h2 class="text-lg font-semibold text-slate-700">
+                    👥 待分配賓客
+                </h2>
+
+                <span
+                    id="unassigned-count"
+                    class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium"
+                >
+                    0 人
+                </span>
+
+            </div>
+
+
+            <form
+                id="addGuestForm"
+                onsubmit="addGuest(event)"
+                class="flex gap-2 mb-4 shrink-0"
             >
 
-
-                <!-- 標題 -->
-                <div
-                    class="flex justify-between items-center mb-3 border-b pb-2 shrink-0"
+                <input
+                    type="text"
+                    id="guestNameInput"
+                    placeholder="輸入姓名或備註..."
+                    required
+                    class="flex-grow min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none"
                 >
 
+                <button
+                    type="submit"
+                    class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shrink-0"
+                >
+                    新增
+                </button>
+
+            </form>
+
+
+            <div
+                id="unassigned-list"
+                class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 space-y-2"
+            ></div>
+
+        </div>
+    </div>
+
+
+    <!-- 右側桌位 -->
+    <div class="lg:col-span-3 flex flex-col gap-4">
+
+        <div
+            id="capture-area"
+            class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
+        >
+
+            <div class="flex justify-between items-center mb-4">
+
+                <div>
                     <h2 class="text-lg font-semibold text-slate-700">
-                        👥 待分配賓客
+                        🍽️ 現場桌位配置
                     </h2>
 
-                    <span
-                        id="unassigned-count"
-                        class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium"
-                    >
-                        0 人
-                    </span>
-
-                </div>
-
-
-                <!-- 手動新增賓客 -->
-                <form
-                    id="addGuestForm"
-                    onsubmit="addGuest(event)"
-                    class="flex gap-2 mb-4 shrink-0"
-                >
-
-                    <input
-                        type="text"
-                        id="guestNameInput"
-                        placeholder="輸入姓名或備註..."
-                        required
-                        class="flex-grow min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                    >
-
-                    <button
-                        type="submit"
-                        class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shrink-0"
-                    >
-                        新增
-                    </button>
-
-                </form>
-
-
-                <!--
-                    待分配名單
-
-                    電腦版時：
-                    這個區塊會自己上下捲動
-                -->
-                <div
-                    id="unassigned-list"
-                    class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 space-y-2"
-                >
+                    <p class="text-xs text-slate-500 mt-0.5">
+                        提示：每張桌子皆可獨立修改名稱與人數上限；支援滑鼠直接拖曳排位。
+                    </p>
                 </div>
 
             </div>
-        </div>
 
-
-
-        <!-- =========================
-             右側：桌位
-        ========================== -->
-        <div class="lg:col-span-3 flex flex-col gap-4">
 
             <div
-                id="capture-area"
-                class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
-            >
+                id="tables-container"
+                class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+            ></div>
 
-                <div class="flex justify-between items-center mb-4">
-
-                    <div>
-
-                        <h2 class="text-lg font-semibold text-slate-700">
-                            🍽️ 現場桌位配置
-                        </h2>
-
-                        <p class="text-xs text-slate-500 mt-0.5">
-                            提示：每張桌子皆可獨立修改名稱與人數上限；支援滑鼠直接拖曳排位。
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <!-- 桌位 -->
-                <div
-                    id="tables-container"
-                    class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-                >
-                </div>
-
-            </div>
         </div>
+    </div>
 
-    </main>
-
-
-
-    <script>
-
-        /* =====================================================
-           資料
-        ====================================================== */
-
-        let state = {
-
-            unassigned: [
-                {
-                    id: 'g1',
-                    name: '新郎長官 A',
-                    note: '長官'
-                },
-                {
-                    id: 'g2',
-                    name: '大學同學 - 小明',
-                    note: '大學'
-                }
-            ],
-
-            tables: {
-
-                'table-vip': {
-                    name: '主桌',
-                    capacity: 12,
-                    guests: []
-                },
-
-                'table-1': {
-                    name: '第 1 桌',
-                    capacity: 10,
-                    guests: []
-                },
-
-                'table-2': {
-                    name: '第 2 桌',
-                    capacity: 10,
-                    guests: []
-                }
-            }
-        };
+</main>
 
 
-        let sortableInstances = [];
+<script>
 
+let state = {
 
-
-        /* =====================================================
-           網頁載入
-        ====================================================== */
-
-        window.addEventListener('DOMContentLoaded', () => {
-
-            const saved =
-                localStorage.getItem('wedding_seating_excel_data');
-
-
-            if (saved) {
-
-                try {
-
-                    const parsed = JSON.parse(saved);
-
-                    if (
-                        parsed.unassigned &&
-                        parsed.tables
-                    ) {
-                        state = parsed;
-                    }
-
-                } catch (e) {
-
-                    console.error(
-                        '載入存檔失敗',
-                        e
-                    );
-                }
-            }
-
-
-            renderAll();
-
-
-            /*
-             * 啟用左側名單獨立滾動
-             */
-            setupGuestSidebarScroll();
-
-        });
-
-
-
-        /* =====================================================
-           儲存
-        ====================================================== */
-
-        function saveData() {
-
-            localStorage.setItem(
-                'wedding_seating_excel_data',
-                JSON.stringify(state)
-            );
-
-            alert(
-                '儲存成功！資料已保留在您的瀏覽器中。'
-            );
+    unassigned: [
+        {
+            id: 'g1',
+            name: '新郎長官 A',
+            note: '長官'
+        },
+        {
+            id: 'g2',
+            name: '大學同學 - 小明',
+            note: '大學'
         }
+    ],
+
+    tables: {
+
+        'table-vip': {
+            name: '主桌',
+            capacity: 12,
+            guests: []
+        },
+
+        'table-1': {
+            name: '第 1 桌',
+            capacity: 10,
+            guests: []
+        },
+
+        'table-2': {
+            name: '第 2 桌',
+            capacity: 10,
+            guests: []
+        }
+    }
+};
 
 
+let sortableInstances = [];
 
-        /* =====================================================
-           重置
-        ====================================================== */
 
-        function resetData() {
+/* =========================
+   網頁載入
+========================= */
+
+window.addEventListener('DOMContentLoaded', () => {
+
+    const saved =
+        localStorage.getItem(
+            'wedding_seating_excel_data'
+        );
+
+    if (saved) {
+
+        try {
+
+            const parsed =
+                JSON.parse(saved);
 
             if (
-                confirm(
-                    '確定要重置所有資料嗎？'
-                )
+                parsed.unassigned &&
+                parsed.tables
             ) {
-
-                localStorage.removeItem(
-                    'wedding_seating_excel_data'
-                );
-
-                location.reload();
+                state = parsed;
             }
-        }
 
+        } catch (e) {
 
-
-        /* =====================================================
-           完整重新顯示
-        ====================================================== */
-
-        function renderAll() {
-
-            /*
-             * 先移除舊的 Sortable
-             * 避免重複綁定
-             */
-            sortableInstances.forEach(
-                instance => instance.destroy()
+            console.error(
+                '載入存檔失敗',
+                e
             );
-
-            sortableInstances = [];
-
-
-            renderUnassigned();
-
-            renderTables();
-
-            initSortable();
         }
+    }
+
+    renderAll();
+
+    setupGuestSidebarScroll();
+});
 
 
+/* =========================
+   儲存
+========================= */
 
-        /* =====================================================
-           Sortable 拖曳
-        ====================================================== */
+function saveData() {
 
-        function initSortable() {
+    localStorage.setItem(
+        'wedding_seating_excel_data',
+        JSON.stringify(state)
+    );
 
-            const commonOptions = {
-
-                group: 'wedding',
-
-                animation: 150,
-
-                ghostClass: 'ghost-card',
-
-
-                /*
-                 * 拖曳到畫面邊緣時
-                 * 自動捲動
-                 */
-                scroll: true,
-
-                scrollSensitivity: 120,
-
-                scrollSpeed: 18,
-
-                bubbleScroll: true,
-
-                forceAutoScrollFallback: true,
+    alert(
+        '儲存成功！資料已保留在您的瀏覽器中。'
+    );
+}
 
 
-                /*
-                 * 拖曳完成
-                 */
-                onEnd: function (evt) {
+/* =========================
+   重置
+========================= */
 
-                    const itemEl = evt.item;
+function resetData() {
 
-                    const guestId =
-                        itemEl.getAttribute('data-id');
+    if (
+        confirm(
+            '確定要重置所有資料嗎？'
+        )
+    ) {
 
-                    const fromContainerId =
-                        evt.from.id;
+        localStorage.removeItem(
+            'wedding_seating_excel_data'
+        );
 
-                    const toContainerId =
-                        evt.to.id;
-
-
-                    /*
-                     * 1.
-                     * 從原本位置移除
-                     */
-                    let movedGuest = null;
+        location.reload();
+    }
+}
 
 
-                    if (
-                        fromContainerId ===
-                        'unassigned-list'
-                    ) {
+/* =========================
+   重新顯示畫面
+========================= */
 
-                        const idx =
-                            state.unassigned.findIndex(
-                                g => g.id === guestId
-                            );
+function renderAll() {
 
+    sortableInstances.forEach(
+        instance =>
+            instance.destroy()
+    );
 
-                        if (idx !== -1) {
+    sortableInstances = [];
 
-                            movedGuest =
-                                state.unassigned.splice(
-                                    idx,
-                                    1
-                                )[0];
-                        }
+    renderUnassigned();
 
-                    } else if (
-                        state.tables[fromContainerId]
-                    ) {
+    renderTables();
 
-                        const idx =
-                            state.tables[
-                                fromContainerId
-                            ].guests.findIndex(
-                                g => g.id === guestId
-                            );
+    initSortable();
+}
 
 
-                        if (idx !== -1) {
+/* =========================
+   拖曳核心
+========================= */
 
-                            movedGuest =
-                                state.tables[
-                                    fromContainerId
-                                ].guests.splice(
-                                    idx,
-                                    1
-                                )[0];
-                        }
-                    }
+function initSortable() {
 
+    const commonOptions = {
 
+        group: 'wedding',
 
-                    /*
-                     * 2.
-                     * 放到新的位置
-                     */
-                    if (movedGuest) {
-
-                        const targetChildren =
-                            Array.from(
-                                evt.to.querySelectorAll(
-                                    'div[data-id]'
-                                )
-                            );
+        /*
+         * 只有真正的賓客卡可以拖
+         */
+        draggable: '[data-id]',
 
 
-                        const newIndex =
-                            targetChildren.indexOf(
-                                itemEl
-                            );
+        /*
+         * 原本 150ms
+         * 改成 60ms
+         * 減少拖曳卡頓
+         */
+        animation: 60,
 
 
-                        /*
-                         * 放回待分配區
-                         */
-                        if (
-                            toContainerId ===
-                            'unassigned-list'
-                        ) {
+        ghostClass:
+            'ghost-card',
 
-                            if (
-                                newIndex >= 0 &&
-                                newIndex <
-                                state.unassigned.length
-                            ) {
+        chosenClass:
+            'chosen-card',
 
-                                state.unassigned.splice(
-                                    newIndex,
-                                    0,
-                                    movedGuest
-                                );
-
-                            } else {
-
-                                state.unassigned.push(
-                                    movedGuest
-                                );
-                            }
-
-                        }
+        dragClass:
+            'drag-card',
 
 
-                        /*
-                         * 放入某一桌
-                         */
-                        else if (
-                            state.tables[
-                                toContainerId
-                            ]
-                        ) {
+        /*
+         * 降低隔壁桌誤吸附
+         */
+        swapThreshold: 0.7,
 
-                            const tableGuests =
-                                state.tables[
-                                    toContainerId
-                                ].guests;
+        invertSwap: false,
+
+        emptyInsertThreshold: 24,
 
 
-                            if (
-                                newIndex >= 0 &&
-                                newIndex <
-                                tableGuests.length
-                            ) {
+        /*
+         * 自動捲動改慢
+         * 避免一下子跳到隔壁桌
+         */
+        scroll: true,
 
-                                tableGuests.splice(
-                                    newIndex,
-                                    0,
-                                    movedGuest
-                                );
+        scrollSensitivity: 55,
 
-                            } else {
+        scrollSpeed: 8,
 
-                                tableGuests.push(
-                                    movedGuest
-                                );
-                            }
-                        }
-                    }
+        bubbleScroll: false,
+
+        forceAutoScrollFallback: false,
 
 
-                    /*
-                     * 更新人數
-                     */
-                    updateAllGuestCounts();
-
-                }
-            };
+        /*
+         * 防止滑鼠只是輕微抖動
+         * 就立刻進入拖曳
+         */
+        fallbackTolerance: 4,
 
 
-            /*
-             * 左側待分配名單
-             */
-            const unassignedList =
-                document.getElementById(
+        /*
+         * 判斷哪些地方可以放
+         */
+        onMove: function(evt) {
+
+            const target =
+                evt.to;
+
+
+            const isValidTarget =
+
+                target.id ===
                     'unassigned-list'
+
+                ||
+
+                target.classList.contains(
+                    'table-drop-zone'
                 );
 
 
-            if (unassignedList) {
+            if (!isValidTarget) {
 
-                sortableInstances.push(
-
-                    new Sortable(
-                        unassignedList,
-                        commonOptions
-                    )
-
-                );
+                return false;
             }
-
 
 
             /*
-             * 每一桌
+             * 如果是桌子
+             * 游標太靠邊界時先不要吸附
+             *
+             * 可降低第 20 桌誤跑第 19 桌
              */
-            for (
-                let key in state.tables
+            if (
+
+                target.classList.contains(
+                    'table-drop-zone'
+                )
+
+                &&
+
+                evt.originalEvent
+
+                &&
+
+                typeof
+                    evt.originalEvent.clientX
+                    === 'number'
+
+                &&
+
+                typeof
+                    evt.originalEvent.clientY
+                    === 'number'
+
             ) {
 
-                const tableEl =
-                    document.getElementById(
-                        key
-                    );
+                const rect =
+                    target.getBoundingClientRect();
 
 
-                if (tableEl) {
+                const margin = 6;
 
-                    sortableInstances.push(
 
-                        new Sortable(
-                            tableEl,
-                            commonOptions
-                        )
+                const x =
+                    evt.originalEvent.clientX;
 
-                    );
+
+                const y =
+                    evt.originalEvent.clientY;
+
+
+                if (
+
+                    x <
+                    rect.left + margin
+
+                    ||
+
+                    x >
+                    rect.right - margin
+
+                    ||
+
+                    y <
+                    rect.top + margin
+
+                    ||
+
+                    y >
+                    rect.bottom - margin
+
+                ) {
+
+                    return false;
                 }
             }
-        }
 
 
-
-        /* =====================================================
-           新增桌
-        ====================================================== */
-
-        function addNewTable() {
-
-            const newId =
-                'table_' + Date.now();
+            return true;
+        },
 
 
-            const tableCount =
-                Object.keys(
-                    state.tables
-                ).length + 1;
+        /*
+         * 放開滑鼠後
+         */
+        onEnd: function(evt) {
+
+            const itemEl =
+                evt.item;
 
 
-            state.tables[newId] = {
-
-                name:
-                    `第 ${tableCount} 桌`,
-
-                capacity: 10,
-
-                guests: []
-            };
+            const guestId =
+                itemEl.getAttribute(
+                    'data-id'
+                );
 
 
-            renderAll();
-        }
+            const fromContainerId =
+                evt.from.id;
 
 
-
-        /* =====================================================
-           刪除桌
-        ====================================================== */
-
-        function deleteTable(tableKey) {
-
-            if (
-                confirm(
-                    `確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`
-                )
-            ) {
-
-                state.unassigned =
-                    state.unassigned.concat(
-                        state.tables[
-                            tableKey
-                        ].guests
-                    );
+            const toContainerId =
+                evt.to.id;
 
 
-                delete state.tables[
-                    tableKey
+            /*
+             * 確認目的地合法
+             */
+            const validDestination =
+
+                toContainerId ===
+                    'unassigned-list'
+
+                ||
+
+                !!state.tables[
+                    toContainerId
                 ];
 
 
+            if (!validDestination) {
+
                 renderAll();
-            }
-        }
 
-
-
-        /* =====================================================
-           手動新增賓客
-        ====================================================== */
-
-        function addGuest(e) {
-
-            e.preventDefault();
-
-
-            const input =
-                document.getElementById(
-                    'guestNameInput'
-                );
-
-
-            const val =
-                input.value.trim();
-
-
-            if (!val) {
                 return;
             }
 
 
-            const newId =
-                'g_' + Date.now();
+            /*
+             * ======================
+             * 同一桌內調整順序
+             * ======================
+             */
+
+            if (
+                fromContainerId ===
+                toContainerId
+            ) {
+
+                /*
+                 * 左側禁止重新排序
+                 */
+                if (
+                    toContainerId ===
+                    'unassigned-list'
+                ) {
+
+                    return;
+                }
 
 
-            state.unassigned.push({
-
-                id: newId,
-
-                name: val,
-
-                note: '手動新增'
-            });
+                const table =
+                    state.tables[
+                        toContainerId
+                    ];
 
 
-            input.value = '';
+                if (!table) {
+
+                    renderAll();
+
+                    return;
+                }
 
 
-            renderAll();
-        }
+                const oldIndex =
+                    table.guests.findIndex(
+
+                        g =>
+                            g.id ===
+                            guestId
+                    );
 
 
+                if (
+                    oldIndex === -1
+                ) {
 
-        /* =====================================================
-           刪除賓客
-        ====================================================== */
+                    renderAll();
 
-        function removeGuest(id) {
+                    return;
+                }
 
-            state.unassigned =
-                state.unassigned.filter(
-                    g => g.id !== id
+
+                const moved =
+                    table.guests.splice(
+                        oldIndex,
+                        1
+                    )[0];
+
+
+                const newIndex =
+                    Math.max(
+
+                        0,
+
+                        Math.min(
+
+                            evt.newIndex ??
+                            table.guests.length,
+
+                            table.guests.length
+                        )
+                    );
+
+
+                table.guests.splice(
+                    newIndex,
+                    0,
+                    moved
                 );
 
 
-            for (
-                let key in state.tables
-            ) {
+                updateAllGuestCounts();
 
-                state.tables[
-                    key
-                ].guests =
-                    state.tables[
-                        key
-                    ].guests.filter(
-                        g => g.id !== id
-                    );
+                return;
             }
 
 
-            renderAll();
-        }
+            /*
+             * ======================
+             * 跨區拖曳
+             * ======================
+             */
 
+            let movedGuest = null;
 
-
-        /* =====================================================
-           下載座位圖片
-        ====================================================== */
-
-        function exportToImage() {
-
-            const captureArea =
-                document.getElementById(
-                    'capture-area'
-                );
-
-
-            alert(
-                '正在產生高畫質座位圖，請稍候...'
-            );
-
-
-            html2canvas(
-                captureArea,
-                {
-
-                    scale: 2,
-
-                    useCORS: true,
-
-                    backgroundColor:
-                        '#ffffff'
-                }
-            )
-
-            .then(
-                canvas => {
-
-                    const link =
-                        document.createElement(
-                            'a'
-                        );
-
-
-                    link.download =
-                        '婚禮座位配置圖.png';
-
-
-                    link.href =
-                        canvas.toDataURL(
-                            'image/png'
-                        );
-
-
-                    link.click();
-                }
-            )
-
-            .catch(
-                err => {
-
-                    console.error(
-                        err
-                    );
-
-
-                    alert(
-                        '截圖失敗，請稍後再試一次。'
-                    );
-                }
-            );
-        }
-
-
-
-        /* =====================================================
-           匯出 Excel
-        ====================================================== */
-
-        function exportToExcel() {
-
-            let exportData = [];
+            let originalIndex = -1;
 
 
             /*
-             * 已分桌賓客
+             * 從左側移出
              */
-            for (
-                let key in state.tables
+            if (
+                fromContainerId ===
+                'unassigned-list'
             ) {
 
-                const table =
-                    state.tables[key];
+                originalIndex =
+                    state.unassigned
+                        .findIndex(
+
+                            g =>
+                                g.id ===
+                                guestId
+                        );
 
 
-                /*
-                 * 空桌
-                 */
                 if (
-                    table.guests.length === 0
+                    originalIndex !== -1
                 ) {
+
+                    movedGuest =
+                        state.unassigned
+                            .splice(
+                                originalIndex,
+                                1
+                            )[0];
+                }
+            }
+
+
+            /*
+             * 從某桌移出
+             */
+            else if (
+                state.tables[
+                    fromContainerId
+                ]
+            ) {
+
+                originalIndex =
+                    state.tables[
+                        fromContainerId
+                    ]
+                    .guests
+                    .findIndex(
+
+                        g =>
+                            g.id ===
+                            guestId
+                    );
+
+
+                if (
+                    originalIndex !== -1
+                ) {
+
+                    movedGuest =
+                        state.tables[
+                            fromContainerId
+                        ]
+                        .guests
+                        .splice(
+                            originalIndex,
+                            1
+                        )[0];
+                }
+            }
+
+
+            /*
+             * 找不到賓客
+             */
+            if (!movedGuest) {
+
+                renderAll();
+
+                return;
+            }
+
+
+            /*
+             * 直接使用 SortableJS
+             * 回傳的 newIndex
+             *
+             * 不再自己從 DOM 猜位置
+             */
+            const newIndex =
+                Math.max(
+                    0,
+                    evt.newIndex ?? 0
+                );
+
+
+            /*
+             * 放回左側
+             */
+            if (
+                toContainerId ===
+                'unassigned-list'
+            ) {
+
+                state.unassigned.splice(
+
+                    Math.min(
+                        newIndex,
+                        state.unassigned.length
+                    ),
+
+                    0,
+
+                    movedGuest
+                );
+            }
+
+
+            /*
+             * 放到桌子
+             */
+            else if (
+                state.tables[
+                    toContainerId
+                ]
+            ) {
+
+                const targetGuests =
+                    state.tables[
+                        toContainerId
+                    ].guests;
+
+
+                targetGuests.splice(
+
+                    Math.min(
+                        newIndex,
+                        targetGuests.length
+                    ),
+
+                    0,
+
+                    movedGuest
+                );
+            }
+
+
+            /*
+             * 如果目的地異常
+             * 賓客放回原位
+             */
+            else {
+
+                if (
+                    fromContainerId ===
+                    'unassigned-list'
+                ) {
+
+                    state.unassigned.splice(
+
+                        Math.min(
+                            Math.max(
+                                originalIndex,
+                                0
+                            ),
+                            state.unassigned.length
+                        ),
+
+                        0,
+
+                        movedGuest
+                    );
+                }
+
+
+                else if (
+                    state.tables[
+                        fromContainerId
+                    ]
+                ) {
+
+                    const sourceGuests =
+                        state.tables[
+                            fromContainerId
+                        ].guests;
+
+
+                    sourceGuests.splice(
+
+                        Math.min(
+                            Math.max(
+                                originalIndex,
+                                0
+                            ),
+                            sourceGuests.length
+                        ),
+
+                        0,
+
+                        movedGuest
+                    );
+                }
+
+
+                renderAll();
+
+                return;
+            }
+
+
+            updateAllGuestCounts();
+        }
+    };
+
+
+    /*
+     * ======================
+     * 左側賓客名單
+     * ======================
+     */
+
+    const unassignedList =
+        document.getElementById(
+            'unassigned-list'
+        );
+
+
+    if (unassignedList) {
+
+        sortableInstances.push(
+
+            new Sortable(
+
+                unassignedList,
+
+                {
+
+                    ...commonOptions,
+
+
+                    /*
+                     * 非常重要
+                     *
+                     * 左側禁止自己重新排序
+                     * 可以降低拖出去時卡住
+                     */
+                    sort: false
+                }
+            )
+        );
+    }
+
+
+    /*
+     * ======================
+     * 每一桌
+     * ======================
+     */
+
+    for (
+        let key in state.tables
+    ) {
+
+        const tableEl =
+            document.getElementById(
+                key
+            );
+
+
+        if (tableEl) {
+
+            sortableInstances.push(
+
+                new Sortable(
+
+                    tableEl,
+
+                    {
+
+                        ...commonOptions,
+
+                        sort: true
+                    }
+                )
+            );
+        }
+    }
+}
+
+
+/* =========================
+   新增桌
+========================= */
+
+function addNewTable() {
+
+    const newId =
+        'table_' +
+        Date.now();
+
+
+    const tableCount =
+        Object.keys(
+            state.tables
+        ).length + 1;
+
+
+    state.tables[
+        newId
+    ] = {
+
+        name:
+            `第 ${tableCount} 桌`,
+
+        capacity:
+            10,
+
+        guests:
+            []
+    };
+
+
+    renderAll();
+}
+
+
+/* =========================
+   刪除桌
+========================= */
+
+function deleteTable(
+    tableKey
+) {
+
+    if (
+
+        confirm(
+
+            `確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`
+
+        )
+
+    ) {
+
+        state.unassigned =
+            state.unassigned.concat(
+
+                state.tables[
+                    tableKey
+                ].guests
+            );
+
+
+        delete state.tables[
+            tableKey
+        ];
+
+
+        renderAll();
+    }
+}
+
+
+/* =========================
+   新增賓客
+========================= */
+
+function addGuest(e) {
+
+    e.preventDefault();
+
+
+    const input =
+        document.getElementById(
+            'guestNameInput'
+        );
+
+
+    const val =
+        input.value.trim();
+
+
+    if (!val) {
+
+        return;
+    }
+
+
+    const newId =
+        'g_' +
+        Date.now();
+
+
+    state.unassigned.push({
+
+        id:
+            newId,
+
+        name:
+            val,
+
+        note:
+            '手動新增'
+    });
+
+
+    input.value = '';
+
+
+    renderAll();
+}
+
+
+/* =========================
+   刪除賓客
+========================= */
+
+function removeGuest(id) {
+
+    state.unassigned =
+        state.unassigned.filter(
+
+            g =>
+                g.id !== id
+        );
+
+
+    for (
+        let key in
+        state.tables
+    ) {
+
+        state.tables[
+            key
+        ].guests =
+
+            state.tables[
+                key
+            ].guests.filter(
+
+                g =>
+                    g.id !== id
+            );
+    }
+
+
+    renderAll();
+}
+
+
+/* =========================
+   匯出圖片
+========================= */
+
+function exportToImage() {
+
+    const captureArea =
+        document.getElementById(
+            'capture-area'
+        );
+
+
+    alert(
+        '正在產生高畫質座位圖，請稍候...'
+    );
+
+
+    html2canvas(
+
+        captureArea,
+
+        {
+
+            scale:
+                2,
+
+            useCORS:
+                true,
+
+            backgroundColor:
+                '#ffffff'
+        }
+    )
+
+    .then(
+
+        canvas => {
+
+            const link =
+                document.createElement(
+                    'a'
+                );
+
+
+            link.download =
+                '婚禮座位配置圖.png';
+
+
+            link.href =
+                canvas.toDataURL(
+                    'image/png'
+                );
+
+
+            link.click();
+        }
+    )
+
+    .catch(
+
+        err => {
+
+            console.error(
+                err
+            );
+
+
+            alert(
+                '截圖失敗，請稍後再試一次。'
+            );
+        }
+    );
+}
+
+
+/* =========================
+   匯出 Excel
+========================= */
+
+function exportToExcel() {
+
+    let exportData = [];
+
+
+    for (
+        let key in
+        state.tables
+    ) {
+
+        const table =
+            state.tables[key];
+
+
+        if (
+            table.guests.length ===
+            0
+        ) {
+
+            exportData.push({
+
+                "桌名":
+                    table.name,
+
+                "人數上限":
+                    table.capacity,
+
+                "目前人數":
+                    0,
+
+                "賓客姓名":
+                    "(此桌尚無賓客)",
+
+                "備註/關係":
+                    ""
+            });
+
+        } else {
+
+            table.guests.forEach(
+
+                g => {
 
                     exportData.push({
 
@@ -953,1000 +1269,830 @@
                             table.capacity,
 
                         "目前人數":
-                            0,
+                            table.guests.length,
 
                         "賓客姓名":
-                            "(此桌尚無賓客)",
+                            g.name,
 
                         "備註/關係":
-                            ""
+                            g.note || ""
                     });
-
                 }
-
-
-                /*
-                 * 有賓客
-                 */
-                else {
-
-                    table.guests.forEach(
-                        g => {
-
-                            exportData.push({
-
-                                "桌名":
-                                    table.name,
-
-                                "人數上限":
-                                    table.capacity,
-
-                                "目前人數":
-                                    table.guests.length,
-
-                                "賓客姓名":
-                                    g.name,
-
-                                "備註/關係":
-                                    g.note || ""
-                            });
-
-                        }
-                    );
-                }
-            }
-
-
-
-            /*
-             * 尚未分配
-             */
-            if (
-                state.unassigned.length > 0
-            ) {
-
-                state.unassigned.forEach(
-                    g => {
-
-                        exportData.push({
-
-                            "桌名":
-                                "【未分配區】",
-
-                            "人數上限":
-                                "-",
-
-                            "目前人數":
-                                state.unassigned.length,
-
-                            "賓客姓名":
-                                g.name,
-
-                            "備註/關係":
-                                g.note || ""
-                        });
-
-                    }
-                );
-            }
-
-
-
-            const worksheet =
-                XLSX.utils.json_to_sheet(
-                    exportData
-                );
-
-
-            const workbook =
-                XLSX.utils.book_new();
-
-
-            XLSX.utils.book_append_sheet(
-                workbook,
-                worksheet,
-                "婚禮座位表"
-            );
-
-
-            XLSX.writeFile(
-                workbook,
-                "婚禮座位表配置結果.xlsx"
             );
         }
+    }
 
 
+    if (
+        state.unassigned.length >
+        0
+    ) {
 
-        /* =====================================================
-           匯入 Excel
-        ====================================================== */
+        state.unassigned.forEach(
 
-        function handleExcelImport(
-            event
-        ) {
+            g => {
 
-            const file =
-                event.target.files[0];
+                exportData.push({
 
+                    "桌名":
+                        "【未分配區】",
 
-            if (!file) {
-                return;
+                    "人數上限":
+                        "-",
+
+                    "目前人數":
+                        state.unassigned.length,
+
+                    "賓客姓名":
+                        g.name,
+
+                    "備註/關係":
+                        g.note || ""
+                });
             }
+        );
+    }
 
 
-            const reader =
-                new FileReader();
+    const worksheet =
+        XLSX.utils.json_to_sheet(
+            exportData
+        );
 
 
+    const workbook =
+        XLSX.utils.book_new();
 
-            reader.onload =
-                function (e) {
 
-                    try {
+    XLSX.utils.book_append_sheet(
 
-                        const data =
-                            new Uint8Array(
-                                e.target.result
+        workbook,
+
+        worksheet,
+
+        "婚禮座位表"
+    );
+
+
+    XLSX.writeFile(
+
+        workbook,
+
+        "婚禮座位表配置結果.xlsx"
+    );
+}
+
+
+/* =========================
+   Excel 匯入
+========================= */
+
+function handleExcelImport(
+    event
+) {
+
+    const file =
+        event.target.files[0];
+
+
+    if (!file) {
+
+        return;
+    }
+
+
+    const reader =
+        new FileReader();
+
+
+    reader.onload =
+        function(e) {
+
+            try {
+
+                const data =
+                    new Uint8Array(
+                        e.target.result
+                    );
+
+
+                const workbook =
+                    XLSX.read(
+
+                        data,
+
+                        {
+                            type:
+                                'array'
+                        }
+                    );
+
+
+                const firstSheetName =
+                    workbook
+                        .SheetNames[0];
+
+
+                const worksheet =
+                    workbook
+                        .Sheets[
+                            firstSheetName
+                        ];
+
+
+                const jsonRows =
+                    XLSX.utils
+                        .sheet_to_json(
+                            worksheet
+                        );
+
+
+                if (
+                    jsonRows.length ===
+                    0
+                ) {
+
+                    alert(
+                        'Excel 內無資料'
+                    );
+
+                    return;
+                }
+
+
+                let addedCount = 0;
+
+
+                jsonRows.forEach(
+
+                    (row, index) => {
+
+                        const nameKeys =
+                            Object.keys(
+                                row
+                            ).filter(
+
+                                k =>
+                                    /姓|名|賓客|名稱/.test(
+                                        k
+                                    )
                             );
 
 
-                        const workbook =
-                            XLSX.read(
-                                data,
-                                {
-                                    type:
-                                        'array'
-                                }
+                        const noteKeys =
+                            Object.keys(
+                                row
+                            ).filter(
+
+                                k =>
+                                    /備註|關係|組別|標籤/.test(
+                                        k
+                                    )
                             );
 
 
-                        const firstSheetName =
-                            workbook
-                                .SheetNames[0];
+                        let name =
+
+                            row[
+                                nameKeys[0]
+                            ]
+
+                            ||
+
+                            row[
+                                Object.keys(
+                                    row
+                                )[0]
+                            ];
 
 
-                        const worksheet =
-                            workbook
-                                .Sheets[
-                                    firstSheetName
-                                ];
+                        let note =
+
+                            row[
+                                noteKeys[0]
+                            ]
+
+                            ||
+
+                            row[
+                                Object.keys(
+                                    row
+                                )[1]
+                            ]
+
+                            ||
+
+                            '';
 
 
-                        const jsonRows =
-                            XLSX.utils
-                                .sheet_to_json(
-                                    worksheet
+                        if (name) {
+
+                            name =
+                                String(
+                                    name
+                                ).trim();
+
+
+                            note =
+                                String(
+                                    note
+                                ).trim();
+
+
+                            const exists =
+
+                                state.unassigned
+                                    .some(
+
+                                        g =>
+                                            g.name ===
+                                            name
+                                    )
+
+                                ||
+
+                                Object.values(
+                                    state.tables
+                                ).some(
+
+                                    t =>
+                                        t.guests.some(
+
+                                            g =>
+                                                g.name ===
+                                                name
+                                        )
                                 );
 
 
-                        if (
-                            jsonRows.length === 0
-                        ) {
+                            if (!exists) {
 
-                            alert(
-                                'Excel 內無資料'
-                            );
+                                const newId =
 
-                            return;
-                        }
+                                    `g_xl_${Date.now()}_${index}`;
 
 
+                                state.unassigned.push({
 
-                        let addedCount = 0;
+                                    id:
+                                        newId,
 
+                                    name:
+                                        name,
 
-
-                        jsonRows.forEach(
-                            (row, index) => {
-
-                                const nameKeys =
-                                    Object.keys(
-                                        row
-                                    ).filter(
-                                        k =>
-                                        /姓|名|賓客|名稱/.test(
-                                            k
-                                        )
-                                    );
+                                    note:
+                                        note
+                                });
 
 
-                                const noteKeys =
-                                    Object.keys(
-                                        row
-                                    ).filter(
-                                        k =>
-                                        /備註|關係|組別|標籤/.test(
-                                            k
-                                        )
-                                    );
-
-
-                                let name =
-                                    row[
-                                        nameKeys[0]
-                                    ] ||
-                                    row[
-                                        Object.keys(
-                                            row
-                                        )[0]
-                                    ];
-
-
-                                let note =
-                                    row[
-                                        noteKeys[0]
-                                    ] ||
-                                    row[
-                                        Object.keys(
-                                            row
-                                        )[1]
-                                    ] ||
-                                    '';
-
-
-                                if (name) {
-
-                                    name =
-                                        String(
-                                            name
-                                        ).trim();
-
-
-                                    note =
-                                        String(
-                                            note
-                                        ).trim();
-
-
-
-                                    /*
-                                     * 檢查是否重複
-                                     */
-                                    const exists =
-                                        state.unassigned
-                                            .some(
-                                                g =>
-                                                g.name ===
-                                                name
-                                            )
-                                        ||
-                                        Object.values(
-                                            state.tables
-                                        ).some(
-                                            t =>
-                                            t.guests.some(
-                                                g =>
-                                                g.name ===
-                                                name
-                                            )
-                                        );
-
-
-                                    if (
-                                        !exists
-                                    ) {
-
-                                        const newId =
-                                            `g_xl_${Date.now()}_${index}`;
-
-
-                                        state.unassigned.push(
-                                            {
-
-                                                id:
-                                                    newId,
-
-                                                name:
-                                                    name,
-
-                                                note:
-                                                    note
-                                            }
-                                        );
-
-
-                                        addedCount++;
-                                    }
-                                }
+                                addedCount++;
                             }
-                        );
-
-
-                        renderAll();
-
-
-                        alert(
-                            `成功匯入 ${addedCount} 位賓客！`
-                        );
-
+                        }
                     }
+                );
 
 
-                    catch (err) {
-
-                        console.error(
-                            err
-                        );
+                renderAll();
 
 
-                        alert(
-                            '讀取 Excel 失敗，請確認檔案格式是否正確。'
-                        );
-                    }
+                alert(
+                    `成功匯入 ${addedCount} 位賓客！`
+                );
+
+            } catch (err) {
+
+                console.error(
+                    err
+                );
 
 
-                    finally {
+                alert(
+                    '讀取 Excel 失敗，請確認檔案格式是否正確。'
+                );
 
-                        event.target.value =
-                            '';
-                    }
-                };
+            } finally {
 
-
-            reader.readAsArrayBuffer(
-                file
-            );
-        }
-
-
-
-        /* =====================================================
-           修改桌名
-        ====================================================== */
-
-        function updateTableName(
-            tableKey,
-            newName
-        ) {
-
-            if (
-                state.tables[
-                    tableKey
-                ]
-            ) {
-
-                state.tables[
-                    tableKey
-                ].name =
-                    newName;
+                event.target.value =
+                    '';
             }
-        }
+        };
 
 
+    reader.readAsArrayBuffer(
+        file
+    );
+}
 
-        /* =====================================================
-           修改桌子上限
-        ====================================================== */
 
-        function updateTableCapacity(
-            tableKey,
+/* =========================
+   修改桌名
+========================= */
+
+function updateTableName(
+    tableKey,
+    newName
+) {
+
+    if (
+        state.tables[
+            tableKey
+        ]
+    ) {
+
+        state.tables[
+            tableKey
+        ].name =
+            newName;
+    }
+}
+
+
+/* =========================
+   修改桌人數
+========================= */
+
+function updateTableCapacity(
+    tableKey,
+    newCapacity
+) {
+
+    const cap =
+        parseInt(
             newCapacity
-        ) {
-
-            const cap =
-                parseInt(
-                    newCapacity
-                ) || 1;
+        ) || 1;
 
 
-            if (
-                state.tables[
-                    tableKey
-                ]
-            ) {
+    if (
+        state.tables[
+            tableKey
+        ]
+    ) {
 
-                state.tables[
-                    tableKey
-                ].capacity =
-                    cap;
-
-
-                updateAllGuestCounts();
-            }
-        }
+        state.tables[
+            tableKey
+        ].capacity =
+            cap;
 
 
-
-        /* =====================================================
-           顯示待分配賓客
-        ====================================================== */
-
-        function renderUnassigned() {
-
-            const container =
-                document.getElementById(
-                    'unassigned-list'
-                );
+        updateAllGuestCounts();
+    }
+}
 
 
-            container.innerHTML =
-                '';
+/* =========================
+   顯示待分配賓客
+========================= */
+
+function renderUnassigned() {
+
+    const container =
+        document.getElementById(
+            'unassigned-list'
+        );
 
 
-            const countEl =
-                document.getElementById(
-                    'unassigned-count'
-                );
+    container.innerHTML =
+        '';
 
 
-            if (countEl) {
-
-                countEl.innerText =
-                    `${state.unassigned.length} 人`;
-            }
-
+    const countEl =
+        document.getElementById(
+            'unassigned-count'
+        );
 
 
-            if (
-                state.unassigned.length === 0
-            ) {
+    if (countEl) {
 
-                container.innerHTML =
-                    `
-                    <div class="text-xs text-slate-400 text-center py-6">
-                        所有賓客皆已入座！
-                    </div>
-                    `;
+        countEl.innerText =
+            `${state.unassigned.length} 人`;
+    }
 
 
-                return;
-            }
+    if (
+        state.unassigned.length ===
+        0
+    ) {
+
+        container.innerHTML = `
+
+            <div
+                class="text-xs text-slate-400 text-center py-6"
+            >
+                所有賓客皆已入座！
+            </div>
+
+        `;
 
 
+        return;
+    }
 
-            state.unassigned.forEach(
-                g => {
 
-                    container.appendChild(
-                        createGuestElement(
-                            g
-                        )
-                    );
-                }
+    state.unassigned.forEach(
+
+        g => {
+
+            container.appendChild(
+
+                createGuestElement(
+                    g
+                )
             );
         }
+    );
+}
 
 
+/* =========================
+   顯示桌位
+========================= */
 
-        /* =====================================================
-           顯示桌位
-        ====================================================== */
+function renderTables() {
 
-        function renderTables() {
+    const container =
+        document.getElementById(
+            'tables-container'
+        );
 
-            const container =
-                document.getElementById(
-                    'tables-container'
-                );
 
+    container.innerHTML =
+        '';
 
-            container.innerHTML =
-                '';
 
+    for (
+        let key in
+        state.tables
+    ) {
 
+        const table =
+            state.tables[key];
 
-            for (
-                let key in state.tables
-            ) {
 
-                const table =
-                    state.tables[key];
-
-
-                const tableCard =
-                    document.createElement(
-                        'div'
-                    );
-
-
-                tableCard.className =
-                    `
-                    bg-white
-                    border
-                    rounded-xl
-                    p-4
-                    flex
-                    flex-col
-                    shadow-sm
-                    border-slate-200
-                    `;
-
-
-
-                tableCard.innerHTML =
-                    `
-
-                    <div class="
-                        flex
-                        flex-col
-                        gap-2
-                        mb-3
-                        pb-2
-                        border-b
-                        border-slate-200
-                    ">
-
-
-                        <div class="
-                            flex
-                            justify-between
-                            items-center
-                            gap-2
-                        ">
-
-                            <input
-                                type="text"
-                                value="${table.name}"
-                                oninput="updateTableName('${key}', this.value)"
-                                class="
-                                    font-bold
-                                    text-sm
-                                    bg-slate-50
-                                    border
-                                    border-slate-200
-                                    rounded
-                                    px-2
-                                    py-1
-                                    flex-grow
-                                    focus:ring-1
-                                    focus:ring-rose-500
-                                    focus:outline-none
-                                "
-                            >
-
-
-                            <button
-                                type="button"
-                                onclick="deleteTable('${key}')"
-                                class="
-                                    text-slate-400
-                                    hover:text-rose-600
-                                    text-xs
-                                    px-1.5
-                                    py-1
-                                "
-                                title="刪除此桌"
-                            >
-                                🗑️
-                            </button>
-
-                        </div>
-
-
-
-                        <div class="
-                            flex
-                            justify-between
-                            items-center
-                            text-xs
-                        ">
-
-
-                            <div class="
-                                flex
-                                items-center
-                                gap-1
-                                text-slate-500
-                            ">
-
-                                <span>
-                                    上限:
-                                </span>
-
-
-                                <input
-                                    type="number"
-                                    value="${table.capacity}"
-                                    min="1"
-                                    max="30"
-                                    oninput="updateTableCapacity('${key}', this.value)"
-                                    class="
-                                        w-14
-                                        border
-                                        border-slate-200
-                                        bg-slate-50
-                                        rounded
-                                        px-1
-                                        py-0.5
-                                        text-center
-                                        focus:ring-1
-                                        focus:ring-rose-500
-                                        focus:outline-none
-                                    "
-                                >
-
-
-                                <span>
-                                    人
-                                </span>
-
-                            </div>
-
-
-
-                            <span
-                                id="count-${key}"
-                                class="
-                                    font-semibold
-                                    px-2
-                                    py-0.5
-                                    rounded-full
-                                "
-                            >
-
-                                ${table.guests.length}
-                                /
-                                ${table.capacity}
-                                人
-
-                            </span>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div
-                        id="${key}"
-                        class="
-                            table-drop-zone
-                            flex-grow
-                            min-h-[100px]
-                            space-y-2
-                            p-1
-                            bg-slate-50/50
-                            rounded-lg
-                        "
-                    >
-                    </div>
-
-                    `;
-
-
-
-                container.appendChild(
-                    tableCard
-                );
-
-
-
-                const guestContainer =
-                    tableCard.querySelector(
-                        `#${key}`
-                    );
-
-
-                table.guests.forEach(
-                    g => {
-
-                        guestContainer.appendChild(
-                            createGuestElement(
-                                g
-                            )
-                        );
-                    }
-                );
-            }
-
-
-            updateAllGuestCounts();
-        }
-
-
-
-        /* =====================================================
-           建立賓客卡片
-        ====================================================== */
-
-        function createGuestElement(
-            g
-        ) {
-
-            const el =
-                document.createElement(
-                    'div'
-                );
-
-
-            el.className =
-                `
-                bg-white
-                p-2
-                rounded-md
-                shadow-sm
-                border
-                border-slate-200
-                flex
-                justify-between
-                items-center
-                cursor-grab
-                active:cursor-grabbing
-                text-sm
-                hover:border-rose-200
-                `;
-
-
-            el.setAttribute(
-                'data-id',
-                g.id
+        const tableCard =
+            document.createElement(
+                'div'
             );
 
 
+        tableCard.className =
 
-            const noteHtml =
-                g.note
-                ?
-                `
-                <span
-                    class="
-                        text-[10px]
-                        bg-slate-100
-                        text-slate-500
-                        px-1.5
-                        py-0.5
-                        rounded
-                        ml-1
-                        truncate
-                        max-w-[80px]
-                    "
-                    title="${g.note}"
-                >
-                    ${g.note}
-                </span>
-                `
-                :
-                '';
+            'bg-white border rounded-xl p-4 flex flex-col shadow-sm border-slate-200';
 
 
+        tableCard.innerHTML = `
 
-            el.innerHTML =
-                `
+            <div
+                class="flex flex-col gap-2 mb-3 pb-2 border-b border-slate-200"
+            >
 
                 <div
-                    class="
-                        flex
-                        items-center
-                        overflow-hidden
-                    "
+                    class="flex justify-between items-center gap-2"
                 >
 
-                    <span
-                        class="
-                            font-medium
-                            text-slate-700
-                            truncate
-                        "
+                    <input
+                        type="text"
+                        value="${table.name}"
+                        oninput="updateTableName('${key}', this.value)"
+                        class="font-bold text-sm bg-slate-50 border border-slate-200 rounded px-2 py-1 flex-grow focus:ring-1 focus:ring-rose-500 focus:outline-none"
                     >
-                        👤 ${g.name}
-                    </span>
 
-                    ${noteHtml}
+
+                    <button
+                        type="button"
+                        onclick="deleteTable('${key}')"
+                        class="text-slate-400 hover:text-rose-600 text-xs px-1.5 py-1"
+                        title="刪除此桌"
+                    >
+                        🗑️
+                    </button>
 
                 </div>
 
 
-                <button
-                    type="button"
-                    onclick="removeGuest('${g.id}')"
-                    class="
-                        text-slate-300
-                        hover:text-rose-600
-                        text-xs
-                        px-1.5
-                        shrink-0
-                    "
-                    title="移除"
+                <div
+                    class="flex justify-between items-center text-xs"
                 >
-                    ✕
-                </button>
 
-                `;
+                    <div
+                        class="flex items-center gap-1 text-slate-500"
+                    >
 
-
-            return el;
-        }
-
-
-
-        /* =====================================================
-           更新每桌人數
-        ====================================================== */
-
-        function updateAllGuestCounts() {
-
-            for (
-                let key in state.tables
-            ) {
-
-                const table =
-                    state.tables[key];
+                        <span>
+                            上限:
+                        </span>
 
 
-                const badge =
-                    document.getElementById(
-                        `count-${key}`
-                    );
+                        <input
+                            type="number"
+                            value="${table.capacity}"
+                            min="1"
+                            max="30"
+                            oninput="updateTableCapacity('${key}', this.value)"
+                            class="w-14 border border-slate-200 bg-slate-50 rounded px-1 py-0.5 text-center focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                        >
 
 
-                if (badge) {
+                        <span>
+                            人
+                        </span>
 
-                    badge.innerText =
-                        `${table.guests.length} / ${table.capacity} 人`;
-
-
-                    /*
-                     * 人數已滿
-                     */
-                    if (
-                        table.guests.length >=
-                        table.capacity
-                    ) {
-
-                        badge.className =
-                            `
-                            font-semibold
-                            px-2
-                            py-0.5
-                            rounded-full
-                            bg-rose-100
-                            text-rose-700
-                            `;
-
-                    }
+                    </div>
 
 
-                    /*
-                     * 尚有座位
-                     */
-                    else {
+                    <span
+                        id="count-${key}"
+                        class="font-semibold px-2 py-0.5 rounded-full"
+                    >
+                        ${table.guests.length}
+                        /
+                        ${table.capacity}
+                        人
+                    </span>
 
-                        badge.className =
-                            `
-                            font-semibold
-                            px-2
-                            py-0.5
-                            rounded-full
-                            bg-emerald-100
-                            text-emerald-700
-                            `;
-                    }
-                }
+                </div>
+
+            </div>
+
+
+            <div
+                id="${key}"
+                class="table-drop-zone flex-grow min-h-[140px] space-y-2 p-2 bg-slate-50/50 rounded-lg border border-transparent"
+            ></div>
+
+        `;
+
+
+        container.appendChild(
+            tableCard
+        );
+
+
+        const guestContainer =
+            tableCard.querySelector(
+                `#${key}`
+            );
+
+
+        table.guests.forEach(
+
+            g => {
+
+                guestContainer.appendChild(
+
+                    createGuestElement(
+                        g
+                    )
+                );
             }
-        }
+        );
+    }
 
 
-
-        /* =====================================================
-           ★ 左側待分配名單獨立滾動
-        ====================================================== */
-
-        function setupGuestSidebarScroll() {
-
-            const sidebar =
-                document.getElementById(
-                    'guest-sidebar'
-                );
+    updateAllGuestCounts();
+}
 
 
-            const list =
-                document.getElementById(
-                    'unassigned-list'
-                );
+/* =========================
+   建立賓客卡片
+========================= */
+
+function createGuestElement(g) {
+
+    const el =
+        document.createElement(
+            'div'
+        );
+
+
+    el.className =
+
+        'bg-white p-2 rounded-md shadow-sm border border-slate-200 flex justify-between items-center cursor-grab active:cursor-grabbing text-sm hover:border-rose-200';
+
+
+    el.setAttribute(
+        'data-id',
+        g.id
+    );
+
+
+    const noteHtml =
+
+        g.note
+
+        ?
+
+        `<span
+            class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-1 truncate max-w-[80px]"
+            title="${g.note}"
+        >
+            ${g.note}
+        </span>`
+
+        :
+
+        '';
+
+
+    el.innerHTML = `
+
+        <div
+            class="flex items-center overflow-hidden"
+        >
+
+            <span
+                class="font-medium text-slate-700 truncate"
+            >
+                👤 ${g.name}
+            </span>
+
+            ${noteHtml}
+
+        </div>
+
+
+        <button
+            type="button"
+            onclick="removeGuest('${g.id}')"
+            class="text-slate-300 hover:text-rose-600 text-xs px-1.5 shrink-0"
+            title="移除"
+        >
+            ✕
+        </button>
+
+    `;
+
+
+    return el;
+}
+
+
+/* =========================
+   更新桌次人數
+========================= */
+
+function updateAllGuestCounts() {
+
+    for (
+        let key in
+        state.tables
+    ) {
+
+        const table =
+            state.tables[key];
+
+
+        const badge =
+            document.getElementById(
+                `count-${key}`
+            );
+
+
+        if (badge) {
+
+            badge.innerText =
+
+                `${table.guests.length} / ${table.capacity} 人`;
 
 
             if (
-                !sidebar ||
-                !list
+
+                table.guests.length >=
+                table.capacity
+
             ) {
+
+                badge.className =
+
+                    'font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700';
+
+            } else {
+
+                badge.className =
+
+                    'font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
+            }
+        }
+    }
+}
+
+
+/* =========================
+   左側名單獨立滾動
+========================= */
+
+function setupGuestSidebarScroll() {
+
+    const sidebar =
+        document.getElementById(
+            'guest-sidebar'
+        );
+
+
+    const list =
+        document.getElementById(
+            'unassigned-list'
+        );
+
+
+    if (
+        !sidebar ||
+        !list
+    ) {
+
+        return;
+    }
+
+
+    sidebar.addEventListener(
+
+        'wheel',
+
+        function(e) {
+
+            /*
+             * 手機版不用攔截
+             */
+            if (
+                window.innerWidth <
+                1024
+            ) {
+
                 return;
             }
 
 
+            const maxScroll =
+
+                list.scrollHeight -
+                list.clientHeight;
+
+
+            if (
+                maxScroll <=
+                0
+            ) {
+
+                return;
+            }
+
+
+            const scrollingDown =
+                e.deltaY > 0;
+
+
+            const scrollingUp =
+                e.deltaY < 0;
+
+
+            const canScrollDown =
+
+                list.scrollTop <
+                maxScroll - 1;
+
+
+            const canScrollUp =
+
+                list.scrollTop >
+                0;
+
 
             /*
-             * 滑鼠放在左側區塊時
-             * 優先控制待分配名單
+             * 左側還能捲時
+             * 優先捲左側
              */
-            sidebar.addEventListener(
-                'wheel',
+            if (
 
-                function (e) {
+                (
+                    scrollingDown &&
+                    canScrollDown
+                )
 
-                    /*
-                     * 手機版不處理
-                     */
-                    if (
-                        window.innerWidth <
-                        1024
-                    ) {
-                        return;
-                    }
+                ||
 
+                (
+                    scrollingUp &&
+                    canScrollUp
+                )
 
-                    const maxScroll =
-                        list.scrollHeight -
-                        list.clientHeight;
+            ) {
+
+                e.preventDefault();
 
 
-                    /*
-                     * 名單沒有超過高度
-                     * 不需要滾動
-                     */
-                    if (
-                        maxScroll <= 0
-                    ) {
-                        return;
-                    }
+                list.scrollTop +=
+                    e.deltaY;
+            }
 
+        },
 
-                    const scrollingDown =
-                        e.deltaY > 0;
-
-
-                    const scrollingUp =
-                        e.deltaY < 0;
-
-
-                    const canScrollDown =
-                        list.scrollTop <
-                        maxScroll - 1;
-
-
-                    const canScrollUp =
-                        list.scrollTop > 0;
-
-
-
-                    /*
-                     * 左側還能往下或往上
-                     * 就先捲左側名單
-                     */
-                    if (
-                        (
-                            scrollingDown &&
-                            canScrollDown
-                        )
-                        ||
-                        (
-                            scrollingUp &&
-                            canScrollUp
-                        )
-                    ) {
-
-                        /*
-                         * 阻止整個網頁一起動
-                         */
-                        e.preventDefault();
-
-
-                        /*
-                         * 捲動左側名單
-                         */
-                        list.scrollTop +=
-                            e.deltaY;
-                    }
-
-
-                    /*
-                     * 左側已經到最上面
-                     * 或最下面
-                     *
-                     * 不 preventDefault
-                     *
-                     * 此時整個網頁就可以
-                     * 繼續上下移動
-                     */
-
-                },
-
-                {
-                    passive: false
-                }
-            );
+        {
+            passive:
+                false
         }
+    );
+}
 
-    </script>
+</script>
 
 </body>
 </html>
