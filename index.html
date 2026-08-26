@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>婚禮彈性排桌系統</title>
+    <!-- 引入 Tailwind CSS、Sortable.js、SheetJS 與 html2canvas -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -14,6 +15,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
+    <!-- 頂部導覽列 -->
     <header class="bg-rose-600 text-white shadow-md py-4 px-6">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 class="text-2xl font-bold tracking-wide">💍 婚禮彈性排桌系統</h1>
@@ -35,8 +37,10 @@
         </div>
     </header>
 
+    <!-- 主體內容 -->
     <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
         
+        <!-- 左側面板：未分配名單 -->
         <div class="lg:col-span-1 flex flex-col gap-6">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-3 border-b pb-2">
@@ -51,10 +55,12 @@
                 </form>
 
                 <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
-                    </div>
+                    <!-- 動態帶入 -->
+                </div>
             </div>
         </div>
 
+        <!-- 右側面板：各桌視覺化區塊 (截圖區範圍) -->
         <div class="lg:col-span-3 flex flex-col gap-4">
             <div id="capture-area" class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-4">
@@ -64,13 +70,16 @@
                     </div>
                 </div>
                 
+                <!-- 桌子呈現網格 -->
                 <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    </div>
+                    <!-- 動態生成各桌 -->
+                </div>
             </div>
         </div>
 
     </main>
 
+    <!-- 網頁互動邏輯 -->
     <script>
         let state = {
             unassigned: [
@@ -179,15 +188,15 @@
             return null;
         }
 
-        // --- 下載圖片功能 (利用 html2canvas 截圖) ---
+        // --- 下載圖片功能 ---
         function exportToImage() {
             updateDataFromDOM();
             const captureArea = document.getElementById('capture-area');
             
-            alert('正在產生高畫質座位圖，請稍候片刻...');
+            alert('正在產生高畫質座位圖，請稍候...');
 
             html2canvas(captureArea, {
-                scale: 2, // 2倍縮放，確保文字和排版在高解析度螢幕或列印時非常清晰
+                scale: 2,
                 useCORS: true,
                 backgroundColor: '#ffffff'
             }).then(canvas => {
@@ -372,14 +381,14 @@
                 tableCard.innerHTML = `
                     <div class="flex flex-col gap-2 mb-3 pb-2 border-b border-slate-200">
                         <div class="flex justify-between items-center gap-2">
-                            <input type="text" value="${table.name}" onchange="updateTableName('${key}', this.value)"
+                            <input type="text" value="${table.name}" oninput="updateTableName('${key}', this.value)"
                                 class="font-bold text-sm bg-slate-50 border border-slate-200 rounded px-2 py-1 flex-grow focus:ring-1 focus:ring-rose-500 focus:outline-none">
-                            <button onclick="deleteTable('${key}')" class="text-slate-400 hover:text-rose-600 text-xs px-1.5 py-1" title="刪除此桌">🗑️</button>
+                            <button type="button" onclick="deleteTable('${key}')" class="text-slate-400 hover:text-rose-600 text-xs px-1.5 py-1" title="刪除此桌">🗑️</button>
                         </div>
                         <div class="flex justify-between items-center text-xs">
                             <div class="flex items-center gap-1 text-slate-500">
                                 <span>上限:</span>
-                                <input type="number" value="${table.capacity}" min="1" max="30" onchange="updateTableCapacity('${key}', this.value)"
+                                <input type="number" value="${table.capacity}" min="1" max="30" oninput="updateTableCapacity('${key}', this.value)"
                                     class="w-14 border border-slate-200 bg-slate-50 rounded px-1 py-0.5 text-center focus:ring-1 focus:ring-rose-500 focus:outline-none">
                                 <span>人</span>
                             </div>
@@ -389,7 +398,8 @@
                         </div>
                     </div>
                     <div id="${key}" class="table-drop-zone flex-grow min-h-[100px] space-y-2 p-1 bg-slate-50/50 rounded-lg">
-                        </div>
+                        <!-- 賓客將插入於此 -->
+                    </div>
                 `;
                 
                 container.appendChild(tableCard);
@@ -414,7 +424,7 @@
                     <span class="font-medium text-slate-700 truncate">👤 ${g.name}</span>
                     ${noteHtml}
                 </div>
-                <button onclick="removeGuest('${g.id}')" class="text-slate-300 hover:text-rose-600 text-xs px-1.5 shrink-0" title="移除">✕</button>
+                <button type="button" onclick="removeGuest('${g.id}')" class="text-slate-300 hover:text-rose-600 text-xs px-1.5 shrink-0" title="移除">✕</button>
             `;
             return el;
         }
@@ -430,3 +440,9 @@
                     } else {
                         badge.className = 'font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
                     }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
