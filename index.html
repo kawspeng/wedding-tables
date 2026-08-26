@@ -272,7 +272,13 @@ let state = {
 
 let sortableInstances = [];
 
+let lastPointerX = 0;
+let lastPointerY = 0;
 
+document.addEventListener('pointermove', function(e) {
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+});
 /* =========================
    網頁載入
 ========================= */
@@ -382,44 +388,22 @@ function initSortable() {
 
         group: 'wedding',
 
-        /*
-         * 只有真正的賓客卡可以拖
-         */
         draggable: '[data-id]',
 
-
-        /*
-         * 原本 150ms
-         * 改成 60ms
-         * 減少拖曳卡頓
-         */
         animation: 60,
 
+        ghostClass: 'ghost-card',
 
-        ghostClass:
-            'ghost-card',
+        chosenClass: 'chosen-card',
 
-        chosenClass:
-            'chosen-card',
+        dragClass: 'drag-card',
 
-        dragClass:
-            'drag-card',
-
-
-        /*
-         * 降低隔壁桌誤吸附
-         */
         swapThreshold: 0.7,
 
         invertSwap: false,
 
-        emptyInsertThreshold: 24,
+        emptyInsertThreshold: 20,
 
-
-        /*
-         * 自動捲動改慢
-         * 避免一下子跳到隔壁桌
-         */
         scroll: true,
 
         scrollSensitivity: 55,
@@ -430,152 +414,111 @@ function initSortable() {
 
         forceAutoScrollFallback: false,
 
-
-        /*
-         * 防止滑鼠只是輕微抖動
-         * 就立刻進入拖曳
-         */
         fallbackTolerance: 4,
 
 
         /*
-         * 判斷哪些地方可以放
-         */
-        onMove: function(evt) {
-
-            const target =
-                evt.to;
-
-
-            const isValidTarget =
-
-                target.id ===
-                    'unassigned-list'
-
-                ||
-
-                target.classList.contains(
-                    'table-drop-zone'
-                );
-
-
-            if (!isValidTarget) {
-
-                return false;
-            }
-
-
-            /*
-             * 如果是桌子
-             * 游標太靠邊界時先不要吸附
-             *
-             * 可降低第 20 桌誤跑第 19 桌
-             */
-            if (
-
-                target.classList.contains(
-                    'table-drop-zone'
-                )
-
-                &&
-
-                evt.originalEvent
-
-                &&
-
-                typeof
-                    evt.originalEvent.clientX
-                    === 'number'
-
-                &&
-
-                typeof
-                    evt.originalEvent.clientY
-                    === 'number'
-
-            ) {
-
-                const rect =
-                    target.getBoundingClientRect();
-
-
-                const margin = 6;
-
-
-                const x =
-                    evt.originalEvent.clientX;
-
-
-                const y =
-                    evt.originalEvent.clientY;
-
-
-                if (
-
-                    x <
-                    rect.left + margin
-
-                    ||
-
-                    x >
-                    rect.right - margin
-
-                    ||
-
-                    y <
-                    rect.top + margin
-
-                    ||
-
-                    y >
-                    rect.bottom - margin
-
-                ) {
-
-                    return false;
-                }
-            }
-
-
-            return true;
-        },
-
-
-        /*
-         * 放開滑鼠後
+         * 拖曳完成
          */
         onEnd: function(evt) {
 
-            const itemEl =
-                evt.item;
-
+            const itemEl = evt.item;
 
             const guestId =
-                itemEl.getAttribute(
-                    'data-id'
-                );
-
+                itemEl.getAttribute('data-id');
 
             const fromContainerId =
                 evt.from.id;
 
 
-            const toContainerId =
-                evt.to.id;
+            /*
+             * ==========================================
+             * ★ 核心修正
+             * 不使用 evt.to 判斷最後桌次
+             *
+             * 直接看滑鼠放開時
+             * 真正位於哪一個元素上
+             * ==========================================
+             */
+
+            const elementUnderMouse =
+                document.elementFromPoint(
+                    lastPointerX,
+                    lastPointerY
+                );
 
 
             /*
-             * 確認目的地合法
+             * 先判斷是不是桌子
              */
+            let actualDropZone =
+                elementUnderMouse
+                    ?.closest(
+                        '.table-drop-zone'
+                    );
+
+
+            /*
+             * 如果不是桌子
+             * 再看看是不是左側待分配名單
+             */
+            if (!actualDropZone) {
+
+                const unassigned =
+                    elementUnderMouse
+                        ?.closest(
+                            '#unassigned-list'
+                        );
+
+
+                if (unassigned) {
+
+                    actualDropZone =
+                        unassigned;
+                }
+            }
+
+
+
+            /*
+             * ==========================================
+             * 如果滑鼠放在空白區
+             *
+             * 不猜桌次
+             * 直接重新渲染
+             * 賓客會回原本位置
+             * ==========================================
+             */
+
+            if (!actualDropZone) {
+
+                renderAll();
+
+                return;
+            }
+
+
+
+            const actualToContainerId =
+                actualDropZone.id;
+
+
+
+            /*
+             * ==========================================
+             * 確認目標真的合法
+             * ==========================================
+             */
+
             const validDestination =
 
-                toContainerId ===
+                actualToContainerId ===
                     'unassigned-list'
 
                 ||
 
                 !!state.tables[
-                    toContainerId
+                    actualToContainerId
                 ];
 
 
@@ -587,101 +530,35 @@ function initSortable() {
             }
 
 
+
             /*
-             * ======================
-             * 同一桌內調整順序
-             * ======================
+             * ==========================================
+             * 如果來源跟真正目的地一樣
+             *
+             * 例如：
+             * 第 8 桌 → 第 8 桌
+             *
+             * 就不用重新搬資料
+             * ==========================================
              */
 
             if (
                 fromContainerId ===
-                toContainerId
+                actualToContainerId
             ) {
 
-                /*
-                 * 左側禁止重新排序
-                 */
-                if (
-                    toContainerId ===
-                    'unassigned-list'
-                ) {
-
-                    return;
-                }
-
-
-                const table =
-                    state.tables[
-                        toContainerId
-                    ];
-
-
-                if (!table) {
-
-                    renderAll();
-
-                    return;
-                }
-
-
-                const oldIndex =
-                    table.guests.findIndex(
-
-                        g =>
-                            g.id ===
-                            guestId
-                    );
-
-
-                if (
-                    oldIndex === -1
-                ) {
-
-                    renderAll();
-
-                    return;
-                }
-
-
-                const moved =
-                    table.guests.splice(
-                        oldIndex,
-                        1
-                    )[0];
-
-
-                const newIndex =
-                    Math.max(
-
-                        0,
-
-                        Math.min(
-
-                            evt.newIndex ??
-                            table.guests.length,
-
-                            table.guests.length
-                        )
-                    );
-
-
-                table.guests.splice(
-                    newIndex,
-                    0,
-                    moved
-                );
-
-
-                updateAllGuestCounts();
+                renderAll();
 
                 return;
             }
 
 
+
             /*
-             * ======================
-             * 跨區拖曳
-             * ======================
+             * ==========================================
+             * 找出被拖曳的賓客
+             * 並從原本資料移除
+             * ==========================================
              */
 
             let movedGuest = null;
@@ -689,8 +566,9 @@ function initSortable() {
             let originalIndex = -1;
 
 
+
             /*
-             * 從左側移出
+             * 從待分配名單移出
              */
             if (
                 fromContainerId ===
@@ -721,8 +599,9 @@ function initSortable() {
             }
 
 
+
             /*
-             * 從某桌移出
+             * 從某一桌移出
              */
             else if (
                 state.tables[
@@ -760,8 +639,10 @@ function initSortable() {
             }
 
 
+
             /*
              * 找不到賓客
+             * 直接恢復畫面
              */
             if (!movedGuest) {
 
@@ -771,142 +652,68 @@ function initSortable() {
             }
 
 
-            /*
-             * 直接使用 SortableJS
-             * 回傳的 newIndex
-             *
-             * 不再自己從 DOM 猜位置
-             */
-            const newIndex =
-                Math.max(
-                    0,
-                    evt.newIndex ?? 0
-                );
-
 
             /*
+             * ==========================================
              * 放回左側
+             * ==========================================
              */
+
             if (
-                toContainerId ===
+                actualToContainerId ===
                 'unassigned-list'
             ) {
 
-                state.unassigned.splice(
-
-                    Math.min(
-                        newIndex,
-                        state.unassigned.length
-                    ),
-
-                    0,
-
+                state.unassigned.push(
                     movedGuest
                 );
             }
 
 
+
             /*
-             * 放到桌子
+             * ==========================================
+             * 放進真正滑鼠所在桌次
+             * ==========================================
              */
+
             else if (
                 state.tables[
-                    toContainerId
+                    actualToContainerId
                 ]
             ) {
 
-                const targetGuests =
-                    state.tables[
-                        toContainerId
-                    ].guests;
-
-
-                targetGuests.splice(
-
-                    Math.min(
-                        newIndex,
-                        targetGuests.length
-                    ),
-
-                    0,
-
+                state.tables[
+                    actualToContainerId
+                ]
+                .guests
+                .push(
                     movedGuest
                 );
             }
 
 
+
             /*
-             * 如果目的地異常
-             * 賓客放回原位
+             * ==========================================
+             * 重新畫面
+             *
+             * 這次直接重新 render
+             * 確保 Sortable 暫時插錯桌的 DOM
+             * 不會殘留
+             * ==========================================
              */
-            else {
 
-                if (
-                    fromContainerId ===
-                    'unassigned-list'
-                ) {
-
-                    state.unassigned.splice(
-
-                        Math.min(
-                            Math.max(
-                                originalIndex,
-                                0
-                            ),
-                            state.unassigned.length
-                        ),
-
-                        0,
-
-                        movedGuest
-                    );
-                }
-
-
-                else if (
-                    state.tables[
-                        fromContainerId
-                    ]
-                ) {
-
-                    const sourceGuests =
-                        state.tables[
-                            fromContainerId
-                        ].guests;
-
-
-                    sourceGuests.splice(
-
-                        Math.min(
-                            Math.max(
-                                originalIndex,
-                                0
-                            ),
-                            sourceGuests.length
-                        ),
-
-                        0,
-
-                        movedGuest
-                    );
-                }
-
-
-                renderAll();
-
-                return;
-            }
-
-
-            updateAllGuestCounts();
+            renderAll();
         }
     };
 
 
+
     /*
-     * ======================
-     * 左側賓客名單
-     * ======================
+     * ==========================================
+     * 左側待分配名單
+     * ==========================================
      */
 
     const unassignedList =
@@ -924,21 +731,54 @@ function initSortable() {
                 unassignedList,
 
                 {
-
                     ...commonOptions,
 
-
                     /*
-                     * 非常重要
-                     *
-                     * 左側禁止自己重新排序
-                     * 可以降低拖出去時卡住
+                     * 左側不允許重新排序
                      */
                     sort: false
                 }
             )
         );
     }
+
+
+
+    /*
+     * ==========================================
+     * 每一桌
+     * ==========================================
+     */
+
+    for (
+        let key in
+        state.tables
+    ) {
+
+        const tableEl =
+            document.getElementById(
+                key
+            );
+
+
+        if (tableEl) {
+
+            sortableInstances.push(
+
+                new Sortable(
+
+                    tableEl,
+
+                    {
+                        ...commonOptions,
+
+                        sort: true
+                    }
+                )
+            );
+        }
+    }
+}
 
 
     /*
