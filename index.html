@@ -100,7 +100,6 @@
         });
 
         function saveData() {
-            updateDataFromDOM(); // 存檔前先確保狀態同步
             localStorage.setItem('wedding_seating_excel_data', JSON.stringify(state));
             alert('儲存成功！資料已保留在您的瀏覽器中。');
         }
@@ -121,13 +120,55 @@
             initSortable();
         }
 
+        // 關鍵核心：當拖曳結束時，直接由事件物件即時更新 state 變數，安全又百分之百準確
         function initSortable() {
             const commonOptions = {
                 group: 'wedding',
                 animation: 150,
                 ghostClass: 'ghost-card',
-                onEnd: function() {
-                    updateDataFromDOM();
+                onEnd: function(evt) {
+                    const itemEl = evt.item; // 被拖曳的元素
+                    const guestId = itemEl.getAttribute('data-id');
+                    const fromContainerId = evt.from.id;
+                    const toContainerId = evt.to.id;
+
+                    // 1. 從原本的地方移除該賓客物件
+                    let movedGuest = null;
+                    if (fromContainerId === 'unassigned-list') {
+                        let idx = state.unassigned.findIndex(g => g.id === guestId);
+                        if (idx !== -1) {
+                            movedGuest = state.unassigned.splice(idx, 1)[0];
+                        }
+                    } else if (state.tables[fromContainerId]) {
+                        let idx = state.tables[fromContainerId].guests.findIndex(g => g.id === guestId);
+                        if (idx !== -1) {
+                            movedGuest = state.tables[fromContainerId].guests.splice(idx, 1)[0];
+                        }
+                    }
+
+                    // 2. 插入到新的目標容器對應的陣列中，依據畫面的順序
+                    if (movedGuest) {
+                        const targetChildren = Array.from(evt.to.querySelectorAll('div[data-id]'));
+                        const newIndex = targetChildren.indexOf(itemEl);
+
+                        if (toContainerId === 'unassigned-list') {
+                            if (newIndex >= 0 && newIndex < state.unassigned.length) {
+                                state.unassigned.splice(newIndex, 0, movedGuest);
+                            } else {
+                                state.unassigned.push(movedGuest);
+                            }
+                        } else if (state.tables[toContainerId]) {
+                            let tableGuests = state.tables[toContainerId].guests;
+                            if (newIndex >= 0 && newIndex < tableGuests.length) {
+                                tableGuests.splice(newIndex, 0, movedGuest);
+                            } else {
+                                tableGuests.push(movedGuest);
+                            }
+                        }
+                    }
+
+                    // 3. 僅更新計數器與 UI 狀態，不重新完整渲染 DOM，避免打斷拖曳畫面
+                    updateAllGuestCounts();
                 }
             };
 
@@ -144,54 +185,16 @@
             }
         }
 
-        function updateDataFromDOM() {
-            let newUnassigned = [];
-            document.querySelectorAll('#unassigned-list > div[data-id]').forEach(el => {
-                let id = el.getAttribute('data-id');
-                let found = findGuestObj(id);
-                if(found) newUnassigned.push(found);
-            });
-            state.unassigned = newUnassigned;
-
-            for(let key in state.tables) {
-                let tableEl = document.getElementById(key);
-                let newTableGuests = [];
-                if(tableEl) {
-                    tableEl.querySelectorAll('div[data-id]').forEach(el => {
-                        let id = el.getAttribute('data-id');
-                        let found = findGuestObj(id);
-                        if(found) newTableGuests.push(found);
-                    });
-                }
-                state.tables[key].guests = newTableGuests;
-            }
-            
-            updateAllGuestCounts();
-        }
-
-        function findGuestObj(id) {
-            let guest = state.unassigned.find(g => g.id === id);
-            if(guest) return guest;
-            
-            for(let key in state.tables) {
-                guest = state.tables[key].guests.find(g => g.id === id);
-                if(guest) return guest;
-            }
-            return null;
-        }
-
-        // --- 核心修正點：各項操作前先執行 updateDataFromDOM() ---
+        // --- 各項按鈕操作 ---
 
         function addNewTable() {
-            updateDataFromDOM(); // 關鍵：新增桌子前，先把畫面上的最新排位抓回 state
             const newId = 'table_' + Date.now();
             const tableCount = Object.keys(state.tables).length + 1;
             state.tables[newId] = { name: `第 ${tableCount} 桌`, capacity: 10, guests: [] };
-            renderAll();
+            renderAll(); // 新增桌子時才重新渲染整個畫面，此時 state 已經是最新且安全的
         }
 
         function deleteTable(tableKey) {
-            updateDataFromDOM(); // 關鍵：刪除前先同步
             if(confirm(`確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`)) {
                 state.unassigned = state.unassigned.concat(state.tables[tableKey].guests);
                 delete state.tables[tableKey];
@@ -201,7 +204,6 @@
 
         function addGuest(e) {
             e.preventDefault();
-            updateDataFromDOM(); // 關鍵：新增賓客前先同步
             const input = document.getElementById('guestNameInput');
             const val = input.value.trim();
             if(!val) return;
@@ -212,7 +214,6 @@
         }
 
         function removeGuest(id) {
-            updateDataFromDOM(); // 關鍵：移除前先同步
             state.unassigned = state.unassigned.filter(g => g.id !== id);
             for(let key in state.tables) {
                 state.tables[key].guests = state.tables[key].guests.filter(g => g.id !== id);
@@ -222,9 +223,7 @@
 
         // --- 下載圖片功能 ---
         function exportToImage() {
-            updateDataFromDOM();
             const captureArea = document.getElementById('capture-area');
-            
             alert('正在產生高畫質座位圖，請稍候...');
 
             html2canvas(captureArea, {
@@ -244,7 +243,6 @@
 
         // --- 匯出 Excel 功能 ---
         function exportToExcel() {
-            updateDataFromDOM();
             let exportData = [];
 
             for(let key in state.tables) {
@@ -289,7 +287,6 @@
         }
 
         function handleExcelImport(event) {
-            updateDataFromDOM();
             const file = event.target.files[0];
             if (!file) return;
 
