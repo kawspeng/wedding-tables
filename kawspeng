@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>婚禮彈性排桌系統</title>
+    <!-- 引入 Tailwind CSS 與 Sortable.js (拖曳功能) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        .ghost-card { opacity: 0.4; background: #cbd5e1 !important; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-rose-600 text-white shadow-md py-4 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h1 class="text-2xl font-bold tracking-wide">💍 婚禮彈性排桌系統</h1>
+            <div class="flex gap-2">
+                <button onclick="addNewTable()" class="bg-rose-500 hover:bg-rose-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">+ 新增一桌</button>
+                <button onclick="saveData()" class="bg-rose-700 hover:bg-rose-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">儲存進度</button>
+                <button onclick="resetData()" class="bg-rose-800 hover:bg-rose-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">重置</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主體內容 -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
+        
+        <!-- 左側面板：新增賓客與未分配名單 -->
+        <div class="lg:col-span-1 flex flex-col gap-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
+                <h2 class="text-lg font-semibold mb-3 text-slate-700 border-b pb-2">👥 待分配賓客</h2>
+                
+                <!-- 新增賓客表單 -->
+                <form id="addGuestForm" onsubmit="addGuest(event)" class="flex gap-2 mb-4">
+                    <input type="text" id="guestNameInput" placeholder="輸入賓客姓名..." required
+                        class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                    <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">新增</button>
+                </form>
+
+                <!-- 未分配清單容器 (可拖曳) -->
+                <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
+                    <!-- 動態帶入 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側面板：各桌視覺化區塊 (每桌皆可獨立改名、改人數上限) -->
+        <div class="lg:col-span-3 flex flex-col gap-4">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-700">🍽️ 現場桌位配置</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">提示：每張桌子都可以直接修改「桌名」與「該桌人數上限」；利用滑鼠拖曳安排座位。</p>
+                    </div>
+                </div>
+                
+                <!-- 桌子呈現網格 -->
+                <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <!-- 動態生成各桌 -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 網頁互動邏輯 -->
+    <script>
+        // 初始狀態資料結構
+        let state = {
+            unassigned: [
+                { id: 'g1', name: '新郎長官 A' },
+                { id: 'g2', name: '新郎長官 B' },
+                { id: 'g3', name: '大學同學 - 小明' },
+                { id: 'g4', name: '大學同學 - 小華' },
+                { id: 'g5', name: '高中死黨 - 阿豪' },
+                { id: 'g6', name: '新娘同事 - Amy' }
+            ],
+            tables: {
+                'table-vip': { name: '主桌', capacity: 12, guests: [] },
+                'table-1': { name: '第 1 桌 (男方親友)', capacity: 10, guests: [] },
+                'table-2': { name: '第 2 桌 (女方親友)', capacity: 10, guests: [] },
+                'table-3': { name: '第 3 桌 (大學同學)', capacity: 8, guests: [] }
+            }
+        };
+
+        // 頁面載入時讀取 localStorage
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('wedding_seating_custom_data');
+            if (saved) {
+                try {
+                    state = JSON.parse(saved);
+                } catch(e) { console.error(e); }
+            }
+            renderAll();
+        });
+
+        function saveData() {
+            localStorage.setItem('wedding_seating_custom_data', JSON.stringify(state));
+            alert('儲存成功！資料已保留在您的瀏覽器中。');
+        }
+
+        function resetData() {
+            if(confirm('確定要重置所有資料嗎？')) {
+                localStorage.removeItem('wedding_seating_custom_data');
+                location.reload();
+            }
+        }
+
+        // 新增一張桌子
+        function addNewTable() {
+            const newId = 'table_' + Date.now();
+            const tableCount = Object.keys(state.tables).length + 1;
+            state.tables[newId] = {
+                name: `第 ${tableCount} 桌`,
+                capacity: 10,
+                guests: []
+            };
+            renderAll();
+        }
+
+        // 刪除某張桌子 (裡面的賓客自動退回未分配)
+        function deleteTable(tableKey) {
+            if(confirm(`確定要刪除「${state.tables[tableKey].name}」嗎？此桌賓客將移回未分配區。`)) {
+                state.unassigned = state.unassigned.concat(state.tables[tableKey].guests);
+                delete state.tables[tableKey];
+                renderAll();
+            }
+        }
+
+        // 當使用者即時修改某桌的名稱
+        function updateTableName(tableKey, newName) {
+            if(state.tables[tableKey]) {
+                state.tables[tableKey].name = newName;
+            }
+        }
+
+        // 當使用者即時修改某桌的人數上限
+        function updateTableCapacity(tableKey, newCapacity) {
+            const cap = parseInt(newCapacity) || 1;
+            if(state.tables[tableKey]) {
+                state.tables[tableKey].capacity = cap;
+                renderTables(); // 重新渲染以更新滿員狀態顏色
+            }
+        }
+
+        // 新增賓客
+        function addGuest(e) {
+            e.preventDefault();
+            const input = document.getElementById('guestNameInput');
+            const name = input.value.trim();
+            if(!name) return;
+
+            const newId = 'g_' + Math.random().toString(36).substr(2, 9);
+            state.unassigned.push({ id: newId, name: name });
+            input.value = '';
+            renderAll();
+        }
+
+        // 刪除賓客
+        function removeGuest(id) {
+            state.unassigned = state.unassigned.filter(g => g.id !== id);
+            for(let key in state.tables) {
+                state.tables[key].guests = state.tables[key].guests.filter(g => g.id !== id);
+            }
+            renderAll();
+        }
+
+        // 核心：重新渲染畫面
+        function renderAll() {
+            renderUnassigned();
+            renderTables();
+            initSortable();
+        }
+
+        // 渲染未分配清單
+        function renderUnassigned() {
+            const container = document.getElementById('unassigned-list');
+            container.innerHTML = '';
+            
+            if(state.unassigned.length === 0) {
+                container.innerHTML = `<div class="text-xs text-slate-400 text-center py-6">所有賓客皆已入座！</div>`;
+                return;
+            }
+
+            state.unassigned.forEach(g => {
+                const el = document.createElement('div');
+                el.className = 'bg-white p-2.5 rounded-lg shadow-sm border border-slate-200 flex justify-between items-center cursor-grab active:cursor-grabbing text-sm';
+                el.setAttribute('data-id', g.id);
+                el.innerHTML = `
+                    <span class="font-medium text-slate-700">👤 ${g.name}</span>
+                    <button onclick="removeGuest('${g.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1">✕</button>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        // 渲染所有桌子
+        function renderTables() {
+            const container = document.getElementById('tables-container');
+            container.innerHTML = '';
+
+            for(let key in state.tables) {
+                let table = state.tables[key];
+                let isFull = table.guests.length >= table.capacity;
+
+                const tableCard = document.createElement('div');
+                tableCard.className = `bg-slate-50 border rounded-xl p-4 flex flex-col transition border-slate-200`;
+                
+                tableCard.innerHTML = `
+                    <!-- 頂部：可直接改桌名、改容量、刪除桌子 -->
+                    <div class="flex flex-col gap-2 mb-3 pb-2 border-b border-slate-200">
+                        <div class="flex justify-between items-center gap-2">
+                            <input type="text" value="${table.name}" onchange="updateTableName('${key}', this.value)"
+                                class="font-bold text-sm bg-white border border-slate-300 rounded px-2 py-1 flex-grow focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                            <button onclick="deleteTable('${key}')" class="text-slate-400 hover:text-rose-600 text-xs px-1.5 py-1" title="刪除此桌">🗑️</button>
+                        </div>
+                        <div class="flex justify-between items-center text-xs">
+                            <div class="flex items-center gap-1 text-slate-500">
+                                <span>上限:</span>
+                                <input type="number" value="${table.capacity}" min="1" max="30" onchange="updateTableCapacity('${key}', this.value)"
+                                    class="w-14 border border-slate-300 rounded px-1 py-0.5 text-center focus:ring-1 focus:ring-rose-500 focus:outline-none">
+                                <span>人</span>
+                            </div>
+                            <span class="font-semibold px-2 py-0.5 rounded-full ${isFull ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
+                                ${table.guests.length} / ${table.capacity} 人
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 該桌的賓客放置區 -->
+                    <div id="${key}" class="table-drop-zone flex-grow min-h-[120px] space-y-2 overflow-y-auto max-h-[220px] p-1">
+                        ${table.guests.map(g => `
+                            <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex justify-between items-center cursor-grab active:cursor-grabbing text-sm" data-id="${g.id}">
+                                <span class="font-medium text-slate-700">👤 ${g.name}</span>
+                                <button onclick="removeGuest('${g.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1">✕</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(tableCard);
+            }
+        }
+
+        // 初始化拖曳功能
+        function initSortable() {
+            new Sortable(document.getElementById('unassigned-list'), {
+                group: 'wedding',
+                animation: 150,
+                ghostClass: 'ghost-card',
+                onEnd: updateDataFromDOM
+            });
+
+            for(let key in state.tables) {
+                const el = document.getElementById(key);
+                if(el) {
+                    new Sortable(el, {
+                        group: 'wedding',
+                        animation: 150,
+                        ghostClass: 'ghost-card',
+                        onEnd: updateDataFromDOM
+                    });
+                }
+            }
+        }
+
+        // 同步拖曳後的資料狀態
+        function updateDataFromDOM() {
+            let newUnassigned = [];
+            document.querySelectorAll('#unassigned-list > div[data-id]').forEach(el => {
+                let id = el.getAttribute('data-id');
+                let found = findGuestObj(id);
+                if(found) newUnassigned.push(found);
+            });
+            state.unassigned = newUnassigned;
+
+            for(let key in state.tables) {
+                let tableEl = document.getElementById(key);
+                let newTableGuests = [];
+                if(tableEl) {
+                    tableEl.querySelectorAll('div[data-id]').forEach(el => {
+                        let id = el.getAttribute('data-id');
+                        let found = findGuestObj(id);
+                        if(found) newTableGuests.push(found);
+                    });
+                }
+                state.tables[key].guests = newTableGuests;
+            }
+
+            renderTables();
+        }
+
+        function findGuestObj(id) {
+            for(let g of state.unassigned) {
+                if(g.id === id) return g;
+            }
+            for(let key in state.tables) {
+                for(let g of state.tables[key].guests) {
+                    if(g.id === id) return g;
+                }
+            }
+            return null;
+        }
+    </script>
+</body>
+</html>
