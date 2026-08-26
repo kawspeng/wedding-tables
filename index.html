@@ -4,36 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>婚禮彈性排桌系統</title>
-    <!-- 引入 Tailwind CSS、Sortable.js 與 SheetJS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         .ghost-card { opacity: 0.4; background: #cbd5e1 !important; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <!-- 頂部導覽列 -->
     <header class="bg-rose-600 text-white shadow-md py-4 px-6">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 class="text-2xl font-bold tracking-wide">💍 婚禮彈性排桌系統</h1>
             <div class="flex flex-wrap gap-2 items-center">
-                <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1.5">
-                    📂 匯入 Excel 賓客
+                <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1">
+                    📂 匯入賓客
                     <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
                 </label>
-                <button onclick="addNewTable()" class="bg-rose-500 hover:bg-rose-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">+ 新增一桌</button>
-                <button onclick="saveData()" class="bg-rose-700 hover:bg-rose-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">儲存進度</button>
-                <button onclick="resetData()" class="bg-rose-800 hover:bg-rose-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">重置</button>
+                <button onclick="exportToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow flex items-center gap-1">
+                    📊 匯出 Excel
+                </button>
+                <button onclick="exportToImage()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow flex items-center gap-1">
+                    📷 下載座位圖
+                </button>
+                <button onclick="addNewTable()" class="bg-rose-500 hover:bg-rose-400 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow">+ 新增桌</button>
+                <button onclick="saveData()" class="bg-rose-700 hover:bg-rose-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow">儲存</button>
+                <button onclick="resetData()" class="bg-rose-800 hover:bg-rose-900 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow">重置</button>
             </div>
         </div>
     </header>
 
-    <!-- 主體內容 -->
     <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
         
-        <!-- 左側面板：未分配名單 -->
         <div class="lg:col-span-1 flex flex-col gap-6">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-3 border-b pb-2">
@@ -48,14 +51,12 @@
                 </form>
 
                 <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
-                    <!-- 動態帶入 -->
-                </div>
+                    </div>
             </div>
         </div>
 
-        <!-- 右側面板：各桌視覺化區塊 -->
         <div class="lg:col-span-3 flex flex-col gap-4">
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div id="capture-area" class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h2 class="text-lg font-semibold text-slate-700">🍽️ 現場桌位配置</h2>
@@ -64,14 +65,12 @@
                 </div>
                 
                 <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    <!-- 動態生成各桌 -->
-                </div>
+                    </div>
             </div>
         </div>
 
     </main>
 
-    <!-- 網頁互動邏輯 -->
     <script>
         let state = {
             unassigned: [
@@ -127,7 +126,6 @@
                 animation: 150,
                 ghostClass: 'ghost-card',
                 onEnd: function() {
-                    // 拖曳結束時，直接從當前畫面的 DOM 結構完整重建資料狀態，確保完全同步
                     updateDataFromDOM();
                 }
             };
@@ -145,7 +143,6 @@
             }
         }
 
-        // 核心修正：從畫面上直接收集各個區塊的元素 ID，重新建構狀態
         function updateDataFromDOM() {
             let newUnassigned = [];
             document.querySelectorAll('#unassigned-list > div[data-id]').forEach(el => {
@@ -168,7 +165,6 @@
                 state.tables[key].guests = newTableGuests;
             }
             
-            // 同步完資料後，執行一次輕量畫面更新（只更新人數與樣式，不重新建立 DOM 避免打斷畫面）
             updateAllGuestCounts();
         }
 
@@ -181,6 +177,74 @@
                 if(guest) return guest;
             }
             return null;
+        }
+
+        // --- 下載圖片功能 (利用 html2canvas 截圖) ---
+        function exportToImage() {
+            updateDataFromDOM();
+            const captureArea = document.getElementById('capture-area');
+            
+            alert('正在產生高畫質座位圖，請稍候片刻...');
+
+            html2canvas(captureArea, {
+                scale: 2, // 2倍縮放，確保文字和排版在高解析度螢幕或列印時非常清晰
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = '婚禮座位配置圖.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }).catch(err => {
+                console.error(err);
+                alert('截圖失敗，請稍後再試一次。');
+            });
+        }
+
+        // --- 匯出 Excel 功能 ---
+        function exportToExcel() {
+            updateDataFromDOM();
+            let exportData = [];
+
+            for(let key in state.tables) {
+                let table = state.tables[key];
+                if(table.guests.length === 0) {
+                    exportData.push({
+                        "桌名": table.name,
+                        "人數上限": table.capacity,
+                        "目前人數": 0,
+                        "賓客姓名": "(此桌尚無賓客)",
+                        "備註/關係": ""
+                    });
+                } else {
+                    table.guests.forEach((g) => {
+                        exportData.push({
+                            "桌名": table.name,
+                            "人數上限": table.capacity,
+                            "目前人數": table.guests.length,
+                            "賓客姓名": g.name,
+                            "備註/關係": g.note || ""
+                        });
+                    });
+                }
+            }
+
+            if(state.unassigned.length > 0) {
+                state.unassigned.forEach(g => {
+                    exportData.push({
+                        "桌名": "【未分配區】",
+                        "人數上限": "-",
+                        "目前人數": state.unassigned.length,
+                        "賓客姓名": g.name,
+                        "備註/關係": g.note || ""
+                    });
+                });
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "婚禮座位表");
+            XLSX.writeFile(workbook, "婚禮座位表配置結果.xlsx");
         }
 
         function handleExcelImport(event) {
@@ -325,8 +389,7 @@
                         </div>
                     </div>
                     <div id="${key}" class="table-drop-zone flex-grow min-h-[100px] space-y-2 p-1 bg-slate-50/50 rounded-lg">
-                        <!-- 賓客將插入於此 -->
-                    </div>
+                        </div>
                 `;
                 
                 container.appendChild(tableCard);
@@ -367,9 +430,3 @@
                     } else {
                         badge.className = 'font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
                     }
-                }
-            }
-        }
-    </script>
-</body>
-</html>
