@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>婚禮彈性排桌系統</title>
-    <!-- 引入 Tailwind CSS、Sortable.js 與 SheetJS (用於讀取 Excel) -->
+    <!-- 引入 Tailwind CSS、Sortable.js 與 SheetJS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -19,7 +19,6 @@
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 class="text-2xl font-bold tracking-wide">💍 婚禮彈性排桌系統</h1>
             <div class="flex flex-wrap gap-2 items-center">
-                <!-- Excel 匯入按鈕 -->
                 <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow cursor-pointer flex items-center gap-1.5">
                     📂 匯入 Excel 賓客
                     <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
@@ -34,7 +33,7 @@
     <!-- 主體內容 -->
     <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 w-full">
         
-        <!-- 左側面板：新增賓客與未分配名單 -->
+        <!-- 左側面板：未分配名單 -->
         <div class="lg:col-span-1 flex flex-col gap-6">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-3 border-b pb-2">
@@ -42,14 +41,12 @@
                     <span id="unassigned-count" class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">0 人</span>
                 </div>
                 
-                <!-- 新增單一賓客表單 -->
                 <form id="addGuestForm" onsubmit="addGuest(event)" class="flex gap-2 mb-4">
                     <input type="text" id="guestNameInput" placeholder="輸入姓名或備註..." required
                         class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none">
                     <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">新增</button>
                 </form>
 
-                <!-- 未分配清單容器 (可拖曳) -->
                 <div id="unassigned-list" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 flex-grow overflow-y-auto max-h-[500px] space-y-2">
                     <!-- 動態帶入 -->
                 </div>
@@ -66,7 +63,6 @@
                     </div>
                 </div>
                 
-                <!-- 桌子呈現網格 -->
                 <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     <!-- 動態生成各桌 -->
                 </div>
@@ -77,7 +73,6 @@
 
     <!-- 網頁互動邏輯 -->
     <script>
-        // 初始狀態資料結構
         let state = {
             unassigned: [
                 { id: 'g1', name: '新郎長官 A', note: '長官' },
@@ -90,10 +85,8 @@
             }
         };
 
-        // 實例化 Sortable 物件的陣列，防止拖曳失效
         let sortableInstances = [];
 
-        // 頁面載入時讀取 localStorage
         window.addEventListener('DOMContentLoaded', () => {
             const saved = localStorage.getItem('wedding_seating_excel_data');
             if (saved) {
@@ -119,36 +112,31 @@
             }
         }
 
-        // 核心：重新渲染畫面並綁定拖曳
         function renderAll() {
-            // 1. 銷毀舊的拖曳實例，避免衝突
             sortableInstances.forEach(instance => instance.destroy());
             sortableInstances = [];
 
-            // 2. 重新產生 HTML
             renderUnassigned();
             renderTables();
-
-            // 3. 重新初始化拖曳功能
             initSortable();
         }
 
-        // 初始化拖曳功能 (SortableJS)
         function initSortable() {
             const commonOptions = {
                 group: 'wedding',
                 animation: 150,
                 ghostClass: 'ghost-card',
-                onEnd: updateDataFromDOM 
+                onEnd: function() {
+                    // 拖曳結束時，直接從當前畫面的 DOM 結構完整重建資料狀態，確保完全同步
+                    updateDataFromDOM();
+                }
             };
 
-            // 綁定未分配區
             const unassignedList = document.getElementById('unassigned-list');
             if (unassignedList) {
                 sortableInstances.push(new Sortable(unassignedList, commonOptions));
             }
 
-            // 綁定各桌區域
             for(let key in state.tables) {
                 const tableEl = document.getElementById(key);
                 if(tableEl) {
@@ -157,7 +145,7 @@
             }
         }
 
-        // 當拖曳結束時，同步 DOM 的順序回 JavaScript 狀態資料中
+        // 核心修正：從畫面上直接收集各個區塊的元素 ID，重新建構狀態
         function updateDataFromDOM() {
             let newUnassigned = [];
             document.querySelectorAll('#unassigned-list > div[data-id]').forEach(el => {
@@ -180,6 +168,7 @@
                 state.tables[key].guests = newTableGuests;
             }
             
+            // 同步完資料後，執行一次輕量畫面更新（只更新人數與樣式，不重新建立 DOM 避免打斷畫面）
             updateAllGuestCounts();
         }
 
@@ -194,7 +183,6 @@
             return null;
         }
 
-        // 處理 Excel 匯入
         function handleExcelImport(event) {
             const file = event.target.files[0];
             if (!file) return;
