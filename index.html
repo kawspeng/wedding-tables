@@ -66,51 +66,100 @@
     }
 
 
-    /* ===== 匯出圖片防止文字超出格子 ===== */
+    /* ===== 匯出圖片文字修正 ===== */
+    .guest-card {
+      min-height: 42px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
     .guest-info {
       display: flex;
       align-items: center;
+      flex: 1;
       min-width: 0;
-      flex: 1 1 auto;
+      height: 24px;
       overflow: hidden;
     }
 
     .guest-name {
+      display: block;
+      flex: 1;
       min-width: 0;
-      flex: 1 1 auto;
-      overflow: hidden;
+      height: 22px;
+      line-height: 22px !important;
       white-space: nowrap;
+      overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .guest-note {
-      flex: 0 0 auto;
-      max-width: 72px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      height: 20px;
+      line-height: 20px !important;
+      max-width: 75px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .table-name-input {
+      height: 34px !important;
+      line-height: 34px !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    .exporting .guest-card {
+      min-height: 42px !important;
+      height: 42px !important;
+      overflow: hidden !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    .exporting .guest-info {
+      height: 24px !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    .exporting .guest-name {
+      height: 22px !important;
+      line-height: 22px !important;
+      overflow: hidden !important;
+      white-space: nowrap !important;
+      text-overflow: ellipsis !important;
+    }
+
+    .exporting .guest-note {
+      height: 20px !important;
+      line-height: 20px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+    }
+
+    .export-table-name {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 14px;
+      font-weight: 700;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      box-sizing: border-box;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
     }
 
-    .table-name-input {
-      min-width: 0;
-      width: 100%;
-    }
-
-    .exporting .guest-card {
-      overflow: hidden !important;
-    }
-
-    .exporting .guest-info,
-    .exporting .guest-name,
-    .exporting .guest-note {
-      overflow: hidden !important;
-    }
-
-    .exporting .guest-name,
-    .exporting .guest-note {
-      white-space: nowrap !important;
-      text-overflow: ellipsis !important;
-    }
   </style>
 </head>
 
@@ -294,7 +343,7 @@
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.value = table.name;
-        nameInput.className = 'table-name-input font-bold text-sm bg-slate-50 border border-slate-200 rounded px-2 py-1 flex-grow focus:ring-1 focus:ring-rose-500 focus:outline-none';
+        nameInput.className = 'table-name-input font-bold text-sm bg-slate-50 border border-slate-200 rounded px-2 flex-grow min-w-0 focus:ring-1 focus:ring-rose-500 focus:outline-none';
         nameInput.addEventListener('input', e => updateTableName(key, e.target.value));
 
         const deleteBtn = document.createElement('button');
@@ -376,7 +425,7 @@
 
       if (guest.note) {
         const note = document.createElement('span');
-        note.className = 'guest-note text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-1';
+        note.className = 'guest-note text-[10px] bg-slate-100 text-slate-500 px-1.5 rounded ml-1';
         note.title = guest.note;
         note.textContent = guest.note;
         left.appendChild(note);
@@ -587,35 +636,89 @@
 
     async function exportToImage() {
       const captureArea = document.getElementById('capture-area');
-      if (!captureArea) return;
+
+      if (!captureArea) {
+        alert('找不到座位圖區域');
+        return;
+      }
 
       alert('正在產生高畫質座位圖，請稍候...');
-      captureArea.classList.add('exporting');
 
       try {
-        // 等字型與版面完全穩定後再截圖，降低 html2canvas 文字錯位機率
         if (document.fonts && document.fonts.ready) {
           await document.fonts.ready;
         }
 
-        await new Promise(resolve => {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(resolve);
-          });
-        });
+        captureArea.classList.add('exporting');
 
-        const width = captureArea.scrollWidth;
-        const height = captureArea.scrollHeight;
+        await new Promise(resolve =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(resolve)
+          )
+        );
 
         const canvas = await html2canvas(captureArea, {
           scale: 2,
           useCORS: true,
           backgroundColor: '#ffffff',
-          width: width,
-          height: height,
-          windowWidth: Math.max(document.documentElement.clientWidth, width),
+          logging: false,
           scrollX: 0,
-          scrollY: -window.scrollY
+          scrollY: -window.scrollY,
+
+          onclone: function(clonedDocument) {
+            const clonedArea = clonedDocument.getElementById('capture-area');
+            if (!clonedArea) return;
+
+            clonedArea.classList.add('exporting');
+
+            const tableNameInputs = clonedArea.querySelectorAll('.table-name-input');
+            tableNameInputs.forEach(input => {
+              const replacement = clonedDocument.createElement('div');
+              replacement.className = 'export-table-name';
+              replacement.textContent = input.value;
+
+              const width = input.getBoundingClientRect().width || input.offsetWidth;
+              if (width) replacement.style.width = width + 'px';
+
+              input.replaceWith(replacement);
+            });
+
+            clonedArea.querySelectorAll('.guest-card').forEach(card => {
+              card.style.display = 'flex';
+              card.style.alignItems = 'center';
+              card.style.minHeight = '42px';
+              card.style.height = '42px';
+              card.style.overflow = 'hidden';
+              card.style.boxSizing = 'border-box';
+            });
+
+            clonedArea.querySelectorAll('.guest-info').forEach(el => {
+              el.style.display = 'flex';
+              el.style.alignItems = 'center';
+              el.style.height = '24px';
+              el.style.minWidth = '0';
+              el.style.overflow = 'hidden';
+            });
+
+            clonedArea.querySelectorAll('.guest-name').forEach(el => {
+              el.style.height = '22px';
+              el.style.lineHeight = '22px';
+              el.style.whiteSpace = 'nowrap';
+              el.style.overflow = 'hidden';
+              el.style.textOverflow = 'ellipsis';
+            });
+
+            clonedArea.querySelectorAll('.guest-note').forEach(el => {
+              el.style.height = '20px';
+              el.style.lineHeight = '20px';
+              el.style.display = 'inline-flex';
+              el.style.alignItems = 'center';
+              el.style.justifyContent = 'center';
+              el.style.whiteSpace = 'nowrap';
+              el.style.overflow = 'hidden';
+              el.style.textOverflow = 'ellipsis';
+            });
+          }
         });
 
         const link = document.createElement('a');
@@ -623,8 +726,8 @@
         link.href = canvas.toDataURL('image/png');
         link.click();
       } catch (err) {
-        console.error(err);
-        alert('截圖失敗，請稍後再試一次。');
+        console.error('座位圖匯出失敗：', err);
+        alert('座位圖產生失敗，請重新整理後再試一次。');
       } finally {
         captureArea.classList.remove('exporting');
       }
