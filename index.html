@@ -634,22 +634,266 @@
       }
     }
 
-    async function exportToImage() {
-      const captureArea = document.getElementById('capture-area');
+    function createExportLayout() {
+      const exportRoot = document.createElement('div');
+      exportRoot.id = 'export-layout-root';
 
-      if (!captureArea) {
-        alert('找不到座位圖區域');
-        return;
+      Object.assign(exportRoot.style, {
+        position: 'absolute',
+        left: '-20000px',
+        top: '0',
+        width: '1500px',
+        padding: '32px',
+        boxSizing: 'border-box',
+        background: '#ffffff',
+        color: '#334155',
+        fontFamily: 'Arial, "Microsoft JhengHei", "Noto Sans TC", sans-serif',
+        fontSize: '14px',
+        lineHeight: '1',
+        zIndex: '-9999'
+      });
+
+      const title = document.createElement('div');
+      title.textContent = '現場桌位配置';
+      Object.assign(title.style, {
+        fontSize: '26px',
+        lineHeight: '36px',
+        fontWeight: '700',
+        height: '36px',
+        display: 'flex',
+        alignItems: 'center',
+        marginBottom: '4px'
+      });
+      exportRoot.appendChild(title);
+
+      const subtitle = document.createElement('div');
+      subtitle.textContent = '婚禮座位配置表';
+      Object.assign(subtitle.style, {
+        fontSize: '15px',
+        lineHeight: '24px',
+        height: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        color: '#64748b',
+        marginBottom: '24px'
+      });
+      exportRoot.appendChild(subtitle);
+
+      const grid = document.createElement('div');
+      Object.assign(grid.style, {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gap: '24px',
+        alignItems: 'start'
+      });
+
+      for (const key in state.tables) {
+        const table = state.tables[key];
+
+        const card = document.createElement('div');
+        Object.assign(card.style, {
+          minWidth: '0',
+          boxSizing: 'border-box',
+          padding: '18px',
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '14px'
+        });
+
+        const tableName = document.createElement('div');
+        tableName.textContent = table.name;
+        Object.assign(tableName.style, {
+          width: '100%',
+          height: '38px',
+          lineHeight: '38px',
+          boxSizing: 'border-box',
+          padding: '0 10px',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: '6px',
+          fontSize: '17px',
+          fontWeight: '700',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        });
+        card.appendChild(tableName);
+
+        const meta = document.createElement('div');
+        Object.assign(meta.style, {
+          height: '34px',
+          marginTop: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px'
+        });
+
+        const capacity = document.createElement('div');
+        capacity.textContent = `上限：${table.capacity} 人`;
+        Object.assign(capacity.style, {
+          height: '28px',
+          lineHeight: '28px',
+          fontSize: '14px',
+          color: '#64748b',
+          whiteSpace: 'nowrap'
+        });
+
+        const count = document.createElement('div');
+        count.textContent = `${table.guests.length} / ${table.capacity} 人`;
+        const full = table.guests.length >= table.capacity;
+        Object.assign(count.style, {
+          height: '28px',
+          lineHeight: '28px',
+          padding: '0 12px',
+          borderRadius: '999px',
+          boxSizing: 'border-box',
+          fontSize: '14px',
+          fontWeight: '700',
+          whiteSpace: 'nowrap',
+          background: full ? '#ffe4e6' : '#d1fae5',
+          color: full ? '#be123c' : '#047857'
+        });
+
+        meta.appendChild(capacity);
+        meta.appendChild(count);
+        card.appendChild(meta);
+
+        const divider = document.createElement('div');
+        Object.assign(divider.style, {
+          height: '1px',
+          background: '#e2e8f0',
+          margin: '8px 0 14px 0'
+        });
+        card.appendChild(divider);
+
+        const guestList = document.createElement('div');
+        Object.assign(guestList.style, {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          minHeight: '100px'
+        });
+
+        if (table.guests.length === 0) {
+          const empty = document.createElement('div');
+          empty.textContent = '此桌尚無賓客';
+          Object.assign(empty.style, {
+            height: '44px',
+            lineHeight: '44px',
+            boxSizing: 'border-box',
+            padding: '0 12px',
+            border: '1px dashed #e2e8f0',
+            borderRadius: '8px',
+            color: '#94a3b8',
+            textAlign: 'center',
+            fontSize: '13px'
+          });
+          guestList.appendChild(empty);
+        } else {
+          table.guests.forEach(guest => {
+            const row = document.createElement('div');
+            Object.assign(row.style, {
+              height: '44px',
+              boxSizing: 'border-box',
+              padding: '0 10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px',
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              overflow: 'hidden'
+            });
+
+            const left = document.createElement('div');
+            Object.assign(left.style, {
+              minWidth: '0',
+              flex: '1 1 auto',
+              height: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              overflow: 'hidden'
+            });
+
+            const dot = document.createElement('span');
+            dot.textContent = '●';
+            Object.assign(dot.style, {
+              flex: '0 0 auto',
+              width: '12px',
+              height: '20px',
+              lineHeight: '20px',
+              fontSize: '11px',
+              color: '#5b21b6',
+              textAlign: 'center'
+            });
+
+            const name = document.createElement('span');
+            name.textContent = guest.name;
+            Object.assign(name.style, {
+              minWidth: '0',
+              flex: '1 1 auto',
+              height: '22px',
+              lineHeight: '22px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#334155',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            });
+
+            left.appendChild(dot);
+            left.appendChild(name);
+            row.appendChild(left);
+
+            if (guest.note) {
+              const note = document.createElement('span');
+              note.textContent = guest.note;
+              Object.assign(note.style, {
+                flex: '0 0 auto',
+                maxWidth: '112px',
+                height: '24px',
+                lineHeight: '24px',
+                boxSizing: 'border-box',
+                padding: '0 8px',
+                borderRadius: '6px',
+                background: '#f1f5f9',
+                color: '#64748b',
+                fontSize: '12px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              });
+              row.appendChild(note);
+            }
+
+            guestList.appendChild(row);
+          });
+        }
+
+        card.appendChild(guestList);
+        grid.appendChild(card);
       }
 
-      alert('正在產生高畫質座位圖，請稍候...');
+      exportRoot.appendChild(grid);
+      document.body.appendChild(exportRoot);
+      return exportRoot;
+    }
+
+    async function exportToImage() {
+      let exportRoot = null;
 
       try {
+        alert('正在產生高畫質座位圖，請稍候...');
+
         if (document.fonts && document.fonts.ready) {
           await document.fonts.ready;
         }
 
-        captureArea.classList.add('exporting');
+        exportRoot = createExportLayout();
 
         await new Promise(resolve =>
           requestAnimationFrame(() =>
@@ -657,68 +901,20 @@
           )
         );
 
-        const canvas = await html2canvas(captureArea, {
+        const width = exportRoot.scrollWidth;
+        const height = exportRoot.scrollHeight;
+
+        const canvas = await html2canvas(exportRoot, {
           scale: 2,
           useCORS: true,
           backgroundColor: '#ffffff',
           logging: false,
+          width,
+          height,
+          windowWidth: width,
+          windowHeight: height,
           scrollX: 0,
-          scrollY: -window.scrollY,
-
-          onclone: function(clonedDocument) {
-            const clonedArea = clonedDocument.getElementById('capture-area');
-            if (!clonedArea) return;
-
-            clonedArea.classList.add('exporting');
-
-            const tableNameInputs = clonedArea.querySelectorAll('.table-name-input');
-            tableNameInputs.forEach(input => {
-              const replacement = clonedDocument.createElement('div');
-              replacement.className = 'export-table-name';
-              replacement.textContent = input.value;
-
-              const width = input.getBoundingClientRect().width || input.offsetWidth;
-              if (width) replacement.style.width = width + 'px';
-
-              input.replaceWith(replacement);
-            });
-
-            clonedArea.querySelectorAll('.guest-card').forEach(card => {
-              card.style.display = 'flex';
-              card.style.alignItems = 'center';
-              card.style.minHeight = '42px';
-              card.style.height = '42px';
-              card.style.overflow = 'hidden';
-              card.style.boxSizing = 'border-box';
-            });
-
-            clonedArea.querySelectorAll('.guest-info').forEach(el => {
-              el.style.display = 'flex';
-              el.style.alignItems = 'center';
-              el.style.height = '24px';
-              el.style.minWidth = '0';
-              el.style.overflow = 'hidden';
-            });
-
-            clonedArea.querySelectorAll('.guest-name').forEach(el => {
-              el.style.height = '22px';
-              el.style.lineHeight = '22px';
-              el.style.whiteSpace = 'nowrap';
-              el.style.overflow = 'hidden';
-              el.style.textOverflow = 'ellipsis';
-            });
-
-            clonedArea.querySelectorAll('.guest-note').forEach(el => {
-              el.style.height = '20px';
-              el.style.lineHeight = '20px';
-              el.style.display = 'inline-flex';
-              el.style.alignItems = 'center';
-              el.style.justifyContent = 'center';
-              el.style.whiteSpace = 'nowrap';
-              el.style.overflow = 'hidden';
-              el.style.textOverflow = 'ellipsis';
-            });
-          }
+          scrollY: 0
         });
 
         const link = document.createElement('a');
@@ -729,7 +925,9 @@
         console.error('座位圖匯出失敗：', err);
         alert('座位圖產生失敗，請重新整理後再試一次。');
       } finally {
-        captureArea.classList.remove('exporting');
+        if (exportRoot && exportRoot.parentNode) {
+          exportRoot.parentNode.removeChild(exportRoot);
+        }
       }
     }
 
